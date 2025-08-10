@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, Info, Package, AlertTriangle, ShoppingCart, Eye, Printer, Gift, Database, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, MessageSquare, Send } from "lucide-react";
+import { Check, X, Info, Package, AlertTriangle, ShoppingCart, Eye, Printer, Gift, Database, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, MessageSquare, Send, PhoneCall, CalendarClock, Layers, BadgeCheck, Plus, Mail, MessageCircle, ImageOff, Cog } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,51 @@ interface ContentProps {
   refreshComenzi: () => void;
 }
 
+// Helper to validate Romanian phone numbers
+// Accepts formats:
+//  - +40[2|3|7]xxxxxxxx (total 12 chars with +)
+//  - 0040[2|3|7]xxxxxxxx
+//  - 0[2|3|7]xxxxxxxx (domestic format, 10 digits)
+// Ignores spaces, dashes, and parentheses.
+const isRomanianPhoneNumber = (input: string | null | undefined): boolean => {
+  if (!input) return false;
+  try {
+    // Remove spaces, dashes, dots, and parentheses
+    let s = String(input).trim().replace(/[\s\-\.()]/g, "");
+    // Normalize 0040 to +40
+    if (s.startsWith("0040")) s = "+" + s.slice(2);
+    // If starts with +, keep it only for +40
+    if (s.startsWith("+")) {
+      // Only accept +40 followed by 9 digits, starting with 2/3/7
+      return /^\+40[237]\d{8}$/.test(s);
+    }
+    // Domestic format: 0[2/3/7] and 8 more digits
+    return /^0[237]\d{8}$/.test(s);
+  } catch {
+    return false;
+  }
+};
+
+// Helper: loose email validation for UI hints
+// Marks invalid when missing '@' or having a clearly wrong TLD like '.con'.
+// We keep it permissive to avoid false negatives, but enough to flag common typos.
+const isLikelyValidEmail = (input: string | null | undefined): boolean => {
+  try {
+    const s = String(input || '').trim();
+    if (!s) return false; // empty treated as invalid for our display logic
+    if (s.includes(' ')) return false;
+    if (!s.includes('@')) return false;
+    // basic shape: something@something.tld (tld at least 2)
+    const basic = /.+@.+\.[A-Za-z]{2,}$/;
+    if (!basic.test(s)) return false;
+    // explicitly reject common typo '.con' ending
+    if (/\.con$/i.test(s)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const Content = ({
   statsData,
   isLoading,
@@ -52,12 +98,59 @@ export const Content = ({
   // State for problem reporting modal
   const [showProblemModal, setShowProblemModal] = useState(false);
   const [currentOrder, setCurrentOrder] = useState<Comanda | null>(null);
+  // Notes off-canvas state
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [notesOrder, setNotesOrder] = useState<Comanda | null>(null);
+  // Add WP note modal state (UI only for now)
+  const [showAddWpNoteModal, setShowAddWpNoteModal] = useState(false);
+  const [addWpNoteText, setAddWpNoteText] = useState('');
+  const [addWpNoteVisibleToCustomer, setAddWpNoteVisibleToCustomer] = useState(true);
+  const [addWpNoteSubmitting, setAddWpNoteSubmitting] = useState(false);
+  const [addWpNoteError, setAddWpNoteError] = useState<string | null>(null);
+  const [addNoteOrderId, setAddNoteOrderId] = useState<number | null>(null);
+  // AWB tracking modal state
+  const [showAwbModal, setShowAwbModal] = useState(false);
+  const [awbLoading, setAwbLoading] = useState(false);
+  const [awbError, setAwbError] = useState<string | null>(null);
+  const [awbData, setAwbData] = useState<any | null>(null);
+  const [awbInfo, setAwbInfo] = useState<{ awb?: string; courier?: string } | null>(null);
+  const [awbOrder, setAwbOrder] = useState<Comanda | null>(null);
 
   // State for gallery modal
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  
+  // Ticket modal for AWB (DPD backline)
+  const [showAwbTicketModal, setShowAwbTicketModal] = useState(false);
+  const [sendTicketSubmitting, setSendTicketSubmitting] = useState(false);
+  const [awbTicketMessage, setAwbTicketMessage] = useState<string>("");
+  const [awbTicketGenerating, setAwbTicketGenerating] = useState<boolean>(false);
+  const awbEditorRef = useRef<HTMLDivElement | null>(null);
+
+  // Follow up email modal (Lipsa poze)
+  const [showFollowUpEmailModal, setShowFollowUpEmailModal] = useState(false);
+  const [followUpEmailMessage, setFollowUpEmailMessage] = useState<string>("Sa nu uite sa trimita poza");
+  const [followUpEmailSubmitting, setFollowUpEmailSubmitting] = useState(false);
+  const [followUpOrder, setFollowUpOrder] = useState<Comanda | null>(null);
+
+  // Retrimitere grafică modal state (UI only)
+  const [showResendGraphicModal, setShowResendGraphicModal] = useState(false);
+  const [resendOrder, setResendOrder] = useState<Comanda | null>(null);
+  const [resendViaEmail, setResendViaEmail] = useState<boolean>(true);
+  const [resendViaSMS, setResendViaSMS] = useState<boolean>(false);
+  const [resendViaWhatsApp, setResendViaWhatsApp] = useState<boolean>(false);
+  const [resendMessage, setResendMessage] = useState<string>("");
+  const [resendSubmitting, setResendSubmitting] = useState<boolean>(false);
+
+  // Email compose modal state (UI only)
+  const [showEmailSendModal, setShowEmailSendModal] = useState(false);
+  const [emailTo, setEmailTo] = useState<string>("");
+  const [emailFrom, setEmailFrom] = useState<string>("");
+  const [emailSubject, setEmailSubject] = useState<string>("");
+  const [emailMessage, setEmailMessage] = useState<string>("");
+  const [emailSubmitting, setEmailSubmitting] = useState<boolean>(false);
 
   // State for inline product annex panel (expanded under status row)
   const [expandedProdPanel, setExpandedProdPanel] = useState<{
@@ -73,6 +166,49 @@ export const Content = ({
   // State for tracking which command is being moved or started
   const [movingCommandId, setMovingCommandId] = useState<number | null>(null);
   const [startingCommandId, setStartingCommandId] = useState<number | null>(null);
+
+  // Backlines tasks: checked IDs per day+zone, persisted in localStorage
+  const [taskCheckedIds, setTaskCheckedIds] = useState<number[]>([]);
+  const getTodayStr = () => {
+    try {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    } catch {
+      return '';
+    }
+  };
+  const getTasksKey = (zone: string) => `tasks:${getTodayStr()}:${(zone || '').toLowerCase()}`;
+  const loadTasksFromStorage = (zone: string) => {
+    try {
+      const raw = localStorage.getItem(getTasksKey(zone));
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) return arr.filter((x) => typeof x === 'number');
+    } catch {}
+    return [];
+  };
+  const saveTasksToStorage = (zone: string, ids: number[]) => {
+    try {
+      localStorage.setItem(getTasksKey(zone), JSON.stringify(ids));
+    } catch {}
+  };
+  useEffect(() => {
+    // Load when zone changes
+    setTaskCheckedIds(loadTasksFromStorage(zonaActiva));
+  }, [zonaActiva]);
+  const isTaskChecked = (id: number) => taskCheckedIds.includes(id);
+  const toggleTaskChecked = (id: number) => {
+    setTaskCheckedIds((prev) => {
+      const exists = prev.includes(id);
+      const next = exists ? prev.filter((x) => x !== id) : [...prev, id];
+      // Persist per day+zone
+      saveTasksToStorage(zonaActiva, next);
+      return next;
+    });
+  };
+
+  // Highlight the order row that opened AWB history
+  const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
 
   // State for inventory modal
   const [showInventoryModal, setShowInventoryModal] = useState(false);
@@ -191,15 +327,26 @@ export const Content = ({
     // We don't filter out commands that are being started
     // This allows the command to remain visible while processing
 
-    // Sort orders with logprodebitare first
-    filtered = filtered.sort((a, b) => {
-      if (a.logprogravare && !b.logprogravare) return -1;
-      if (!a.logprogravare && b.logprogravare) return 1;
-      return 0;
-    });
+    if (zonaActiva === 'backlines') {
+      // Sort oldest first by data_comanda (fallback to post_date). Missing dates go to bottom.
+      filtered = [...filtered].sort((a, b) => {
+        const da = a.data_comanda || a.post_date || '';
+        const db = b.data_comanda || b.post_date || '';
+        const ta = da ? new Date(da).getTime() : Number.POSITIVE_INFINITY;
+        const tb = db ? new Date(db).getTime() : Number.POSITIVE_INFINITY;
+        return ta - tb;
+      });
+    } else {
+      // Default sort: prioritize items with logprogravare
+      filtered = [...filtered].sort((a, b) => {
+        if (a.logprogravare && !b.logprogravare) return -1;
+        if (!a.logprogravare && b.logprogravare) return 1;
+        return 0;
+      });
+    }
 
     return filtered;
-  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica]);
+  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica, zonaActiva]);
 
 
   // Extract unique shipping dates
@@ -264,7 +411,7 @@ export const Content = ({
       setNewStockValues({});
       setInventorySearchTerm("");
 
-      const response = await fetch('https://actium.ro/api/financiar/lista-raport-stocuri/sistem:gravare');
+      const response = await fetch('https://actium.ro/api/financiar/lista-raport-stocuri/sistem:customer');
 
       if (!response.ok) {
         throw new Error('Failed to fetch inventory data');
@@ -640,6 +787,42 @@ export const Content = ({
     }
   };
 
+  // AWB tracking: open modal and fetch history for DPD
+  const handleOpenAwbModal = async (order: Comanda, courierText: string) => {
+    try {
+      const awb = (order.awb_curier || '').toString().trim();
+      const courier = (courierText || '').toString().trim();
+      setAwbOrder(order);
+      setAwbInfo({ awb, courier });
+      setAwbError(null);
+      setAwbData(null);
+      setHighlightedOrderId(order?.ID || null);
+      setShowAwbModal(true);
+      if (!awb) {
+        setAwbError('Nu există AWB pentru această comandă.');
+        return;
+      }
+      const isDPD = courier.toLowerCase().includes('dpd');
+      if (!isDPD) {
+        setAwbError('Tracking disponibil doar pentru DPD în acest moment.');
+        return;
+      }
+      setAwbLoading(true);
+      const res = await fetch(`https://crm.actium.ro/api/dpd-istoric-awb/${encodeURIComponent(awb)}`, {
+        headers: { accept: 'application/json' }
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.message || 'Eroare la preluarea istoricului AWB');
+      }
+      setAwbData(json);
+    } catch (e: any) {
+      setAwbError(e?.message || 'Eroare necunoscută');
+    } finally {
+      setAwbLoading(false);
+    }
+  };
+
   // Function to handle "Incepe Debitare" button click
   const handleIncepeDebitareClick = async (comandaId: number) => {
     try {
@@ -682,10 +865,39 @@ export const Content = ({
     }
   };
 
+  // Helper: days until a given YYYY-MM-DD or date-like string (midnight-based)
+  const daysUntil = (dateStr?: string | null): number | null => {
+    try {
+      if (!dateStr) return null;
+      const s = String(dateStr).trim();
+      if (!s) return null;
+      // Normalize common formats to a Date at local midnight
+      let d: Date | null = null;
+      // Try YYYY-MM-DD first
+      const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m2) {
+        d = new Date(Number(m2[1]), Number(m2[2]) - 1, Number(m2[3]));
+      } else {
+        // Fallback: try Date constructor (replace space with T to avoid timezone surprises)
+        const tmp = new Date(s.replace(' ', 'T'));
+        if (!isNaN(tmp.getTime())) {
+          d = new Date(tmp.getFullYear(), tmp.getMonth(), tmp.getDate());
+        }
+      }
+      if (!d) return null;
+      const today = new Date();
+      const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const ms = d.getTime() - t0.getTime();
+      return Math.round(ms / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <>
-      <main className={`${showChat ? 'pr-[15vw]' : ''} ml-32 mt-20 flex-1 backgroundculiniute`}>
-        <div className="grid grid-cols-1 sm:grid-cols-9 gap-2 mb-6 relative p-3 border border-b-1 border-border bg-white dark:bg-[#020817]  ">
+      <main className={`${showChat ? 'pr-[15vw]' : ''} ml-32 mt-20 flex-1 backgroundculiniute pb-20`}>
+        <div className="grid grid-cols-1 sm:grid-cols-8 gap-2  relative p-3 border border-b-1 border-border bg-white dark:bg-[#020817]  ">
           {/* Mobile toggle button for expanding/collapsing statuses */}
           <div className="sm:hidden w-full mb-2 flex justify-center -mt-8">
             <Button 
@@ -712,6 +924,10 @@ export const Content = ({
           {statsData.map((stat, idx) => {
             // On mobile, only show "Productie" by default or if statuses are expanded
             const isProduction = stat.title === "Productie";
+            // Hide these three from the top row; they move to the bottom fixed bar
+            const hiddenTop = ['precomanda','backlines','confirmare'];
+            const statKey = (stat.title || '').toLowerCase().replace(/\s+/g, '');
+            if (hiddenTop.includes(statKey)) return null;
 
             return (
               <Card
@@ -809,7 +1025,7 @@ export const Content = ({
             return { file: a || n, useAlpha: !!a };
           };
           return (
-            <div className="border border-border w-full p-3 rounded-md bg-card/50 mb-4 " style={{ width: '100%', overflow: 'auto' }}>
+            <div className="border border-border w-full rounded-md bg-card/50 mb-4 " style={{ width: '100%', overflow: 'auto' }}>
               <div className="relative overflow-x-auto">
                 <Table className="w-full text-xs min-w-[900px]">
                   <TableHeader>
@@ -897,142 +1113,6 @@ export const Content = ({
           );
         })()}
 
-        <div className="mb-6 mx-3">
-          {/* Mobile view: flex layout */}
-          <div className="flex flex-col sm:hidden gap-3">
-            <div className="flex items-center gap-2 w-full">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Caută comenzi după nume sau ID..."
-                className="p-2 border rounded-md w-full text-sm bg-background text-foreground border-input placeholder:text-muted-foreground"
-              />
-            </div>
-          </div>
-
-          {/* Desktop view: 3-grid layout */}
-          <div className="hidden sm:grid md:grid-cols-3 gap-3 ">
-
-              {/* Middle grid: Inventory and Studiu buttons */}
-              <div className="flex gap-2 items-stretch">
-                  <Card
-                      className="p-2 cursor-pointer whitespace-nowrap transition-colors h-full flex items-center"
-                      onClick={() => {
-                          fetchInventoryData();
-                          setShowInventoryModal(true);
-                      }}
-                  >
-                      <div className="flex items-center gap-2">
-                          <div className="w-6 h-6  rounded flex items-center justify-center">
-                              <Database className="w-4 h-4 text-black dark:text-white" />
-                          </div>
-                          <span className="text-xs">Stocuri</span>
-                      </div>
-                  </Card>
-                  <Card
-                      className="p-2 cursor-pointer whitespace-nowrap transition-colors h-full flex items-center"
-                      onClick={() => {
-                          fetchStudiuData();
-                          setShowStudiuModal(true);
-                      }}
-                  >
-                      <div className="flex items-center gap-2">
-                          <div className="w-6 h-6  rounded flex items-center justify-center">
-                              <Info className="w-4 h-4 text-black dark:text-white" />
-                          </div>
-                          <span className="text-xs">Studiu</span>
-                      </div>
-                  </Card>
-                  {/* Filtru: All / Cu gravare / Cu printare */}
-                  <Card className="px-3 py-2 flex items-center">
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground">Filtru:</span>
-                      <label className="inline-flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tipGrafica"
-                          value="all"
-                          checked={filterTipGrafica === 'all'}
-                          onChange={() => setFilterTipGrafica('all')}
-                          className="accent-blue-600"
-                        />
-                        <span>All</span>
-                      </label>
-                      <label className="inline-flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tipGrafica"
-                          value="gravare"
-                          checked={filterTipGrafica === 'gravare'}
-                          onChange={() => setFilterTipGrafica('gravare')}
-                          className="accent-blue-600"
-                        />
-                        <span>Cu gravare</span>
-                      </label>
-                      <label className="inline-flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tipGrafica"
-                          value="printare"
-                          checked={filterTipGrafica === 'printare'}
-                          onChange={() => setFilterTipGrafica('printare')}
-                          className="accent-blue-600"
-                        />
-                        <span>Cu printare</span>
-                      </label>
-                    </div>
-                  </Card>
-              </div>
-
-            {/* Left grid: Search input */}
-            <div className="flex items-center">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Caută comenzi după nume sau ID..."
-                className="p-2 border rounded-md w-full text-sm bg-background text-foreground border-input placeholder:text-muted-foreground"
-              />
-            </div>
-
-
-
-            {/* Right grid: Shipping dates */}
-            <div className="flex justify-end">
-              <div className="flex flex-wrap gap-1">
-                {uniqueShippingDates.map((date, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedShippingData(selectedShippingData === date ? null : date)}
-                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                      selectedShippingData === date 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-secondary text-secondary-foreground hover:opacity-90'
-                    }`}
-                  >
-                    {date}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          {/*{selectedShippingData && (*/}
-          {/*    <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between">*/}
-          {/*      <div className="flex items-center gap-2">*/}
-          {/*        <span className="text-blue-700 text-sm font-medium">Filtrare după data de expediere:</span>*/}
-          {/*        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{selectedShippingData}</span>*/}
-          {/*      </div>*/}
-          {/*      <button*/}
-          {/*          onClick={() => setSelectedShippingData(null)}*/}
-          {/*          className="p-1 bg-blue-200 hover:bg-blue-300 rounded-full flex items-center justify-center"*/}
-          {/*      >*/}
-          {/*        <X size={16} className="text-blue-700" />*/}
-          {/*      </button>*/}
-          {/*    </div>*/}
-          {/*)}*/}
-
-        </div>
 
 
 
@@ -1045,7 +1125,7 @@ export const Content = ({
           </div>
         )}
 
-        <div className="space-y-4 mx-3">
+        <div className="space-y-4 ">
           {comenzi.length === 0 && !isLoadingComenzi && (
             <Card className="p-8 text-center">
               <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
@@ -1066,7 +1146,1394 @@ export const Content = ({
             </Card>
           )}
 
+            {/* Backlines tasks summary */}
+          {zonaActiva === 'backlines' && displayedComenzi.length > 0 && (
+            (() => {
+              const checked = displayedComenzi.filter((c) => isTaskChecked(c.ID)).length;
+              const total = displayedComenzi.length;
+              const remaining = Math.max(0, total - checked);
+              const nextNames = displayedComenzi.filter((c) => !isTaskChecked(c.ID)).slice(0, 5).map((c) => {
+                const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
+                const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
+                return `${first} ${last}`.trim() || `#${c.ID}`;
+              });
+              return (
+                <div className="p-2 border border-border rounded-md bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="text-xs sm:text-sm">
+                    <span className="mr-3"><span className="text-muted-foreground">Bifate azi:</span> <span className="font-semibold">{checked}</span></span>
+                    <span><span className="text-muted-foreground">Rămase:</span> <span className="font-semibold">{remaining}</span></span>
+                  </div>
+                  {nextNames.length > 0 && (
+                    <div className="text-xs sm:text-sm flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">Urmează:</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {nextNames.map((n, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded bg-accent text-accent-foreground border border-border">
+                            {n}
+                          </span>
+                        ))}
+                        {remaining > nextNames.length && (
+                          <span className="text-muted-foreground">+{remaining - nextNames.length} altele</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          )}
+
+          {/* Orders table (replaces old grid) */}
             {displayedComenzi.length > 0 && (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {zonaActiva === 'backlines' && (
+                        <TableHead className="w-10">
+                          <span className="sr-only">Task</span>
+                        </TableHead>
+                      )}
+                      <TableHead>ID</TableHead>
+                      {zonaActiva === 'backlines' && (
+                        <TableHead>Curier</TableHead>
+                      )}
+                      <TableHead>Nume</TableHead>
+                      <TableHead>Data comandă</TableHead>
+                      {zonaActiva === 'precomanda' && (
+                        <>
+                          <TableHead>Data expediere</TableHead>
+                          <TableHead>Zile până la expediere</TableHead>
+                        </>
+                      )}
+                      <TableHead>Telefon Billing / Shipping</TableHead>
+                      <TableHead>Email</TableHead>
+                      {zonaActiva === 'backlines' && (
+                        <TableHead>Status</TableHead>
+                      )}
+                      {zonaActiva === 'neconfirmate' && (
+                        <TableHead>Motive</TableHead>
+                      )}
+                      <TableHead>Acțiuni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {displayedComenzi.map((c) => {
+                      const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
+                      const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
+                      const name = `${first} ${last}`.trim();
+                      const rawDate = c.data_comanda || c.post_date || '';
+                      const phone = c.billing_details?._billing_phone || '';
+                      const email = c.billing_details?._billing_email || '';
+                      // Prepare courier and avatar/notes info for separate row
+                      const r = (c.ramburs || '').toString().trim();
+                      const mtc = (c.metodatransportcustom || '').toString().trim();
+                      const token = r ? r.split(/\s+/)[0] : '';
+                      const courierText = (token || mtc || '').trim();
+                      const lower = courierText.toLowerCase();
+                      const isDPD = lower.includes('dpd');
+                      const isFAN = lower.includes('fan');
+                      const notesCount = Array.isArray(c.notes) ? c.notes.length : 0;
+                      const initials = (first || last) ? `${(first||'').charAt(0)}${(last||'').charAt(0)}`.toUpperCase() : '#';
+                      const isBacklines = zonaActiva === 'backlines';
+                      const expStr = c.expediere || '';
+                      const daysUntilExp = daysUntil(expStr);
+                      const isPreOneDay = zonaActiva === 'precomanda' && daysUntilExp === 1;
+                      const isPreToday = zonaActiva === 'precomanda' && daysUntilExp === 0;
+                      const motivesObj: any = (c as any).motive_comanda_neconfirmata || {};
+                      const motivesActiveCount = Object.keys(motivesObj || {}).filter((k) => {
+                        const v = motivesObj[k]?.meta_value;
+                        return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                      }).length;
+                      const totalCols = isBacklines ? 7 : 6;
+                      return (
+                        <TableRow key={`${c.ID}-main`} className={`${(highlightedOrderId === c.ID || isTaskChecked(c.ID) || isPreOneDay) ? 'bg-green-100' : ''}`}>
+                          {zonaActiva === 'backlines' && (
+                            <TableCell className="w-10">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 align-middle"
+                                checked={isTaskChecked(c.ID)}
+                                onChange={() => toggleTaskChecked(c.ID)}
+                                title={isTaskChecked(c.ID) ? 'Debifează task' : 'Bifează task'}
+                              />
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(`https://darurialese.com/wp-admin/post.php?post=${c.ID}&action=edit`, '_blank')}
+                              title={`Deschide comanda #${c.ID}`}
+                            >
+                              #{c.ID}
+                            </Button>
+                          </TableCell>
+                          {zonaActiva === 'backlines' && (
+                            <TableCell>
+                              {(() => {
+                                const r = (c.ramburs || '').toString().trim();
+                                const mtc = (c.metodatransportcustom || '').toString().trim();
+                                const token = r ? r.split(/\s+/)[0] : '';
+                                const courierText = (token || mtc || '').trim();
+                                const lower = courierText.toLowerCase();
+                                const isDPD = lower.includes('dpd');
+                                const isFAN = lower.includes('fan');
+                                return (
+                                  <div className="flex items-center gap-2 min-w-[260px]">
+                                    {courierText ? (
+                                      <>
+                                        {isDPD && (
+                                          <img src="/curieri/dpd.jpg" alt="DPD" className="w-6 h-4 object-contain rounded bg-white" />
+                                        )}
+                                        {isFAN && (
+                                          <img src="/curieri/fan.jpg" alt="FAN Courier" className="w-6 h-4 object-contain rounded bg-white" />
+                                        )}
+                                        <span className="text-xs text-muted-foreground">{courierText}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                    <input
+                                      type="text"
+                                      value={c.awb_curier || ''}
+                                      readOnly
+                                      placeholder="AWB curier"
+                                      className="h-7 px-2 py-1 text-xs border rounded w-[180px] bg-background text-foreground border-input"
+                                      title={c.awb_curier || ''}
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2"
+                                      onClick={() => handleOpenAwbModal(c, courierText)}
+                                      disabled={!c.awb_curier}
+                                      title={c.awb_curier ? `Istoric AWB ${c.awb_curier}` : 'Fără AWB'}
+                                      aria-label={c.awb_curier ? `Istoric AWB ${c.awb_curier}` : 'Fără AWB'}
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            {(() => {
+                              const notesCount = Array.isArray(c.notes) ? c.notes.length : 0;
+                              const bFirst = (c.billing_details?._billing_first_name || '').trim();
+                              const bLast = (c.billing_details?._billing_last_name || '').trim();
+                              const sFirst = (c.shipping_details._shipping_first_name || '').trim();
+                              const sLast = (c.shipping_details._shipping_last_name || '').trim();
+                              const billingName = `${bFirst} ${bLast}`.trim();
+                              const shippingName = `${sFirst} ${sLast}`.trim();
+                              // Primary display: prefer billing name if available, else shipping
+                              const primaryName = billingName || shippingName || '';
+                              // Compare names case-insensitive without extra spaces
+                              const norm = (v: string) => v.replace(/\s+/g, ' ').trim().toLowerCase();
+                              const showSecondary = billingName && shippingName && norm(billingName) !== norm(shippingName);
+                              const secondaryName = billingName && shippingName
+                                ? (primaryName === billingName ? shippingName : billingName)
+                                : '';
+                              return (
+                                <div className="flex items-start gap-2 min-w-0">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-base sm:text-lg font-semibold leading-none truncate flex items-center gap-1" title={primaryName || '-' }>
+                                      <span className="truncate">{primaryName || '-'}</span>
+                                      {(() => {
+                                        const v: any = (c as any).fara_factura_in_colet;
+                                        const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                                        return isGift ? (
+                                          <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />
+                                        ) : null;
+                                      })()}
+                                    </div>
+                                    {showSecondary && secondaryName && (
+                                      <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={secondaryName}>
+                                        {secondaryName}
+                                      </div>
+                                    )}
+                                    {(() => {
+                                      const comp = (c.billing_details?._billing_numefirma || '').trim();
+                                      return comp ? (
+                                        <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={comp}>
+                                          Firma: <span className="font-medium text-foreground">{comp}</span>
+                                        </div>
+                                      ) : null;
+                                    })()}
+                                    {isPreOneDay && (
+                                      <div className="mt-1 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-400" title="Poate fi sunat – pleacă mâine">
+                                        <PhoneCall className="w-3 h-3" />
+                                        <span>Poate fi sunat – pleacă mâine</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 ml-1 flex items-center gap-1 shrink-0"
+                                    onClick={() => { setNotesOrder(c); setShowNotesPanel(true); }}
+                                    title={notesCount > 0 ? `Vezi notițe (${notesCount})` : 'Fără notițe'}
+                                  >
+                                    <MessageSquare className="w-4 h-4" />
+                                    <span className="text-xs">{notesCount}</span>
+                                  </Button>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>{rawDate ? formatDate(rawDate) : '-'}</TableCell>
+                          {zonaActiva === 'precomanda' && (
+                            <>
+                              <TableCell>{(c.expediere && String(c.expediere).trim()) || '-'}</TableCell>
+                              <TableCell>{(daysUntilExp ?? null) !== null ? (isPreToday ? (
+                                <div className="flex items-center gap-2">
+                                  <span>Azi</span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2"
+                                    onClick={() => alert('Mută în producție – în curând')}
+                                    title="Muta in productie"
+                                    aria-label="Muta in productie"
+                                  >
+                                    <span>Muta in productie</span>
+                                    <ChevronRight className="w-4 h-4 ml-1" />
+                                  </Button>
+                                </div>
+                              ) : daysUntilExp) : '-'}</TableCell>
+                            </>
+                          )}
+                          <TableCell>
+                            {(() => {
+                              const shippingPhone = (c.shipping_details as any)?._shipping_phone || '';
+                              const billingPhone = (c.billing_details as any)?._billing_phone || '';
+                              const telHref = (v: string) => `tel:${String(v).replace(/[^+\d]/g, '')}`;
+                              const renderPhone = (label: string, val: string) => {
+                                const invalid = !isRomanianPhoneNumber(val);
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] text-muted-foreground">{label}:</span>
+                                    {invalid ? (
+                                      <span className="inline-flex items-center gap-1 text-red-600 text-sm" title="Telefon invalid – format greșit">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        <a href={telHref(val)} className="text-red-600 hover:underline">{val}</a>
+                                      </span>
+                                    ) : (
+                                      <a href={telHref(val)} className="text-blue-600 hover:underline text-sm">{val}</a>
+                                    )}
+                                  </div>
+                                );
+                              };
+                              if (!shippingPhone && !billingPhone) return '-';
+                              // Always show both entries when at least one exists; use '-' placeholder if one is missing
+                              const bp = String(billingPhone || '').trim();
+                              const sp = String(shippingPhone || '').trim();
+                              const phonesDifferent = !!bp && !!sp && bp !== sp;
+                              return (
+                                <div className={`${phonesDifferent ? 'relative border border-red-500 rounded p-1 bg-red-50/40' : ''} flex flex-col gap-0.5`}>
+                                  {phonesDifferent && (
+                                    <AlertTriangle className="absolute -top-2 -right-2 w-4 h-4 text-red-600 bg-white rounded-full border border-red-500" title="Numere diferite Billing vs Shipping" />
+                                  )}
+                                  {billingPhone ? (
+                                    renderPhone('Billing', billingPhone)
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] text-muted-foreground">Billing:</span>
+                                      <span className="text-sm">-</span>
+                                    </div>
+                                  )}
+                                  {shippingPhone ? (
+                                    renderPhone('Shipping', shippingPhone)
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] text-muted-foreground">Shipping:</span>
+                                      <span className="text-sm">-</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const e = String(email || '').trim();
+                              if (!e) return '-';
+                              const valid = isLikelyValidEmail(e);
+                              return (
+                                <div className={`flex items-center justify-between gap-2 border rounded px-2 py-1 ${valid ? 'border-input bg-background' : 'border-red-500 bg-red-50/40'}`}>
+                                  <div className="min-w-0">
+                                    {valid ? (
+                                      <a href={`mailto:${e}`} className="text-blue-600 hover:underline truncate block" title={e}>{e}</a>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-red-600 truncate" title="Email invalid – lipsă @ sau terminație greșită (ex: .con)">
+                                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                                        <span className="truncate">{e}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 shrink-0"
+                                    title="Trimite email"
+                                    aria-label="Trimite email"
+                                    onClick={() => {
+                                      try {
+                                        const stored = localStorage.getItem('userData');
+                                        let from = 'office@darurialese.ro';
+                                        if (stored) {
+                                          const ud = JSON.parse(stored);
+                                          if (ud && typeof ud.email === 'string' && ud.email.trim()) from = ud.email.trim();
+                                        }
+                                        setEmailTo(e);
+                                        setEmailFrom(from);
+                                        setEmailSubject(`Mesaj comanda #${c.ID}`);
+                                        setEmailMessage('');
+                                        setShowEmailSendModal(true);
+                                      } catch {
+                                        setEmailTo(e);
+                                        setEmailFrom('office@darurialese.ro');
+                                        setEmailSubject(`Mesaj comanda #${c.ID}`);
+                                        setEmailMessage('');
+                                        setShowEmailSendModal(true);
+                                      }
+                                    }}
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          {zonaActiva === 'backlines' && (
+                            <TableCell>
+                              {c.post_status ? (
+                                <Badge variant="secondary">{c.post_status}</Badge>
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
+                          )}
+                          {zonaActiva === 'neconfirmate' && (
+                            <TableCell>
+                              {(() => {
+                                const motives = (c as any).motive_comanda_neconfirmata || {};
+                                const ids = Object.keys(motives || {});
+                                const activeCount = ids.filter((k) => {
+                                  const v = motives[k]?.meta_value;
+                                  return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                                }).length;
+                                const checked = Math.min(3, activeCount);
+                                return (
+                                  <div className="flex items-center gap-2" title={ids.length ? `Motive: ${ids.join(', ')}` : 'Fără motive'}>
+                                    {[0,1,2].map((i) => (
+                                      <input key={i} type="checkbox" className="h-4 w-4" checked={i < checked} readOnly />
+                                    ))}
+                                    <span className="text-[11px] text-muted-foreground">{activeCount}/3</span>
+                                    <Info className="w-4 h-4 text-muted-foreground" />
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            {zonaActiva === 'backlines' ? (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => phone && (window.location.href = `tel:${phone}`)}
+                                  title="Contactează client"
+                                  aria-label="Contactează client"
+                                >
+                                  <PhoneCall className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => alert('Ticket curier – în curând')}
+                                  title="Creează ticket curier"
+                                  aria-label="Creează ticket curier"
+                                >
+                                  <Send className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => { setCurrentOrder(c); setShowProblemModal(true); }}
+                                  title="Adaugă mențiune"
+                                  aria-label="Adaugă mențiune"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                {zonaActiva === 'precomanda' ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => { setAddWpNoteText('Lipsa poze'); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(c.ID); setShowAddWpNoteModal(true); }}
+                                      title="Lipsa poze"
+                                      aria-label="Lipsa poze"
+                                    >
+                                      Lipsa poze
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => alert('Procesare – în curând')}
+                                      title="Procesare"
+                                      aria-label="Procesare"
+                                    >
+                                      <span>Procesare</span>
+                                      <Cog className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => alert('Anulare – în curând')}
+                                      title="Anulează"
+                                      aria-label="Anulează"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                ) : (zonaActiva === 'platainasteptare' || zonaActiva === 'inasteptare') ? (
+                                                                  <>
+                                                                    <Button
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Precomanda – în curând')}
+                                                                      title="Precomanda"
+                                                                      aria-label="Precomanda"
+                                                                    >
+                                                                      <span>Precomanda</span>
+                                                                      <CalendarClock className="w-4 h-4 ml-1" />
+                                                                    </Button>
+                                                                    <Button
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Lipsa poza – în curând')}
+                                                                      title="Lipsa poza"
+                                                                      aria-label="Lipsa poza"
+                                                                    >
+                                                                      <span>Lipsa poza</span>
+                                                                      <ImageOff className="w-4 h-4 ml-1" />
+                                                                    </Button>
+                                                                    <Button
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Procesare – în curând')}
+                                                                      title="Procesare"
+                                                                      aria-label="Procesare"
+                                                                    >
+                                                                      <span>Procesare</span>
+                                                                      <Cog className="w-4 h-4 ml-1" />
+                                                                    </Button>
+                                                                    <Button
+                                                                      variant="destructive"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Anulare – în curând')}
+                                                                      title="Anulează"
+                                                                      aria-label="Anulează"
+                                                                    >
+                                                                      <X className="w-4 h-4" />
+                                                                    </Button>
+                                                                  </>
+                                                                ) : (zonaActiva === 'neconfirmate' || zonaActiva === 'desunat' || zonaActiva === 'procesare') ? (
+                                                                  <>
+                                                                    <Button
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Precomanda – în curând')}
+                                                                      title="Precomanda"
+                                                                      aria-label="Precomanda"
+                                                                    >
+                                                                      <span>Precomanda</span>
+                                                                      <CalendarClock className="w-4 h-4 ml-1" />
+                                                                    </Button>
+                                                                    <Button
+                                                                      variant="outline"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Lipsa poza – în curând')}
+                                                                      title="Lipsa poza"
+                                                                      aria-label="Lipsa poza"
+                                                                    >
+                                                                      <span>Lipsa poza</span>
+                                                                      <ImageOff className="w-4 h-4 ml-1" />
+                                                                    </Button>
+                                                                    {(zonaActiva !== 'neconfirmate' || motivesActiveCount >= 3) && (
+                                                                      <Button
+                                                                        variant="destructive"
+                                                                        size="sm"
+                                                                        onClick={() => alert('Anulare – în curând')}
+                                                                        title="Anulează"
+                                                                        aria-label="Anulează"
+                                                                      >
+                                                                        <X className="w-4 h-4" />
+                                                                      </Button>
+                                                                    )}
+                                                                    <Button
+                                                                      variant="default"
+                                                                      size="sm"
+                                                                      onClick={() => alert('Confirmare – în curând')}
+                                                                      title="Confirmare"
+                                                                      aria-label="Confirmare"
+                                                                    >
+                                                                      <Check className="w-4 h-4" />
+                                                                    </Button>
+                                                                  </>
+                                                                ) : (zonaActiva === 'aprobare' || zonaActiva === 'aprobareclient') ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => { 
+                                                                            const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
+                                                                            const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
+                                                                            const nm = `${first} ${last}`.trim();
+                                                                            const id = c.ID ? `#${c.ID}` : '';
+                                                                            const tmpl = `Bună ziua${nm ? ' ' + nm : ''},\nVă retrimitem grafica pentru comanda ${id}.\nVă rugăm să verificați și să ne confirmați.\nMulțumim!`;
+                                                                            setResendOrder(c);
+                                                                            setResendViaEmail(true);
+                                                                            setResendViaSMS(false);
+                                                                            setResendViaWhatsApp(false);
+                                                                            setResendMessage(tmpl);
+                                                                            setShowResendGraphicModal(true);
+                                                                          }}
+                                      title="Retrimitere grafica"
+                                      aria-label="Retrimitere grafica"
+                                    >
+                                      <span>Retrimitere grafica</span>
+                                      <Send className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => alert('Productie – în curând')}
+                                      title="Productie"
+                                      aria-label="Productie"
+                                    >
+                                      <span>Productie</span>
+                                      <Layers className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => { setAddWpNoteText('Grafica greșită'); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(c.ID); setShowAddWpNoteModal(true); }}
+                                      title="Grafica gresita"
+                                      aria-label="Grafica gresita"
+                                    >
+                                      <span>Grafica gresita</span>
+                                      <AlertTriangle className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => alert('Anulare – în curând')}
+                                      title="Anulează"
+                                      aria-label="Anulează"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                ) : zonaActiva === 'lipsapoze' ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => { setFollowUpOrder(c); setFollowUpEmailMessage('Sa nu uite sa trimita poza'); setShowFollowUpEmailModal(true); }}
+                                      title="Trimite email Follow up"
+                                      aria-label="Trimite email Follow up"
+                                      className="inline-flex items-center gap-1"
+                                    >
+                                      <Mail className="w-4 h-4" />
+                                      <span>Follow up</span>
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => {
+                                        try {
+                                          const sp = (c.shipping_details as any)?._shipping_phone || '';
+                                          const bp = (c.billing_details as any)?._billing_phone || '';
+                                          const pick = String(sp || bp || '').trim();
+                                          if (!pick) { alert('Nu există telefon pentru WhatsApp.'); return; }
+                                          let s = pick.replace(/\D/g, '');
+                                          if (s.startsWith('00')) s = s.slice(2);
+                                          if (s.startsWith('40')) {
+                                            // OK
+                                          } else if (s.startsWith('0')) {
+                                            s = '4' + s; // 0XXXXXXXXX -> 4XXXXXXXXX (becomes 40... once prefixed)
+                                            if (!s.startsWith('40')) s = '40' + s.slice(1);
+                                          } else if (s.startsWith('7') && s.length === 9) {
+                                            s = '40' + s;
+                                          } else if (s.startsWith('+' )) {
+                                            s = s.slice(1);
+                                          }
+                                          const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
+                                          const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
+                                          const nume = `${first} ${last}`.trim();
+                                          const msg = `Bună ziua${nume ? ' ' + nume : ''}, vă rugăm să ne trimiteți poza pentru comanda #${c.ID}. Mulțumim!`;
+                                          const url = `https://wa.me/${s}?text=${encodeURIComponent(msg)}`;
+                                          window.open(url, '_blank');
+                                        } catch (e) {
+                                          alert('Nu s-a putut deschide WhatsApp.');
+                                        }
+                                      }}
+                                      title="Cere poza pe WhatsApp"
+                                      aria-label="Cere poza pe WhatsApp"
+                                      className="inline-flex items-center gap-1"
+                                    >
+                                      <MessageCircle className="w-4 h-4" />
+                                      <span>WhatsApp</span>
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => alert('Precomanda – în curând')}
+                                      title="Precomanda"
+                                      aria-label="Precomanda"
+                                    >
+                                      <span>Precomanda</span>
+                                      <CalendarClock className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => alert('Procesare – în curând')}
+                                      title="Procesare"
+                                      aria-label="Procesare"
+                                    >
+                                      <span>Procesare</span>
+                                      <Cog className="w-4 h-4 ml-1" />
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => alert('Anulare – în curând')}
+                                      title="Anulează"
+                                      aria-label="Anulează"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {isDPD && c.awb_curier && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        title="Trimite tichet DPD"
+                                        aria-label="Trimite tichet DPD"
+                                        onClick={() => {
+                                          setAwbOrder(c);
+                                          setAwbInfo({ awb: (c.awb_curier || '').toString().trim(), courier: courierText });
+                                          setAwbTicketMessage("");
+                                          setAwbTicketGenerating(false);
+                                          setShowAwbTicketModal(true);
+                                        }}
+                                      >
+                                        <Send className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => phone && (window.location.href = `tel:${phone}`)}
+                                      title="Sună"
+                                      aria-label="Sună"
+                                    >
+                                      <PhoneCall className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="outline" size="sm" title="Precomandă" aria-label="Precomandă">
+                                      <CalendarClock className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="outline" size="sm">Lipsa poze</Button>
+                                    <Button variant="destructive" size="sm" title="Anulează" aria-label="Anulează">
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="default" size="sm" title="Confirmă" aria-label="Confirmă">
+                                      <Check className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {/* Notes off-canvas */}
+            {showNotesPanel && (
+              <div className="fixed inset-0 z-50">
+                <div className="absolute inset-0 bg-black/50" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); setShowAddWpNoteModal(false); }} />
+                <div className="absolute right-0 top-0 h-full w-[90vw] sm:w-[460px] bg-white dark:bg-[#020817] border-l border-border shadow-xl flex flex-col">
+                  <div className="p-3 border-b border-border flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5" />
+                      <div className="font-semibold">Notițe comandă #{notesOrder?.ID}</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        title="Adaugă notiță WordPress"
+                        onClick={() => { setAddWpNoteText(''); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(notesOrder?.ID || null); setShowAddWpNoteModal(true); }}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    {Array.isArray(notesOrder?.notes) && notesOrder!.notes.length > 0 ? (
+                      notesOrder!.notes.map((n, idx) => (
+                        <div key={idx} className="p-2 rounded-md border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">{n.comment_date}</div>
+                          <div className="text-sm whitespace-pre-wrap break-words">{n.comment_content}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
+                    )}
+                  </div>
+                  <div className="p-3 border-t border-border text-right">
+                    <Button variant="outline" size="sm" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); }}>Închide</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Add WP Note modal (UI only) */}
+            {showAddWpNoteModal && (
+              <div className="fixed inset-0 z-[60]">
+                {/* Backdrop that only closes this modal, not the notes off-canvas */}
+                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }} />
+                <div className="absolute inset-x-0 top-12 mx-auto w-[94vw] sm:w-[520px] bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
+                  <div className="p-3 border-b border-border flex items-center justify-between">
+                    <div className="font-semibold">Trimite notiță WordPress pentru comanda #{addNoteOrderId || notesOrder?.ID || awbOrder?.ID}</div>
+                    <Button variant="ghost" size="sm" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="p-3 space-y-3">
+                    {addWpNoteError && <div className="text-sm text-red-600">{addWpNoteError}</div>}
+                    <div>
+                      <Label htmlFor="wp-note-text" className="text-sm">Mesaj</Label>
+                      <textarea
+                        id="wp-note-text"
+                        className="mt-1 w-full min-h-[120px] p-2 border rounded bg-background text-foreground border-input text-sm"
+                        placeholder="Scrie notița aici..."
+                        value={addWpNoteText}
+                        onChange={(e) => setAddWpNoteText(e.target.value)}
+                        disabled={addWpNoteSubmitting}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm select-none">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={addWpNoteVisibleToCustomer}
+                        onChange={(e) => setAddWpNoteVisibleToCustomer(e.target.checked)}
+                        disabled={addWpNoteSubmitting}
+                      />
+                      Vizibil pentru client
+                    </label>
+                  </div>
+                  <div className="p-3 border-t border-border flex items-center justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }}>Renunță</Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (addWpNoteSubmitting) return;
+                        setAddWpNoteError(null);
+                        const text = (addWpNoteText || '').trim();
+                        if (!text) {
+                          setAddWpNoteError('Te rugăm să scrii un mesaj.');
+                          return;
+                        }
+                        setAddWpNoteSubmitting(true);
+                        // Simulare succes local: adăugăm notița în lista potrivită și închidem doar acest modal
+                        try {
+                          const now = new Date();
+                          const pad = (n: number) => String(n).padStart(2, '0');
+                          const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+                          const newNote = { comment_date: dateStr, comment_content: text } as any;
+                          if (notesOrder?.ID && notesOrder.ID === addNoteOrderId) {
+                            setNotesOrder(prev => {
+                              if (!prev) return prev;
+                              const prevNotes = Array.isArray(prev.notes) ? prev.notes : [];
+                              return { ...prev, notes: [...prevNotes, newNote] };
+                            });
+                          }
+                          if (awbOrder?.ID && awbOrder.ID === addNoteOrderId) {
+                            setAwbOrder(prev => {
+                              if (!prev) return prev;
+                              const prevNotes = Array.isArray(prev.notes) ? prev.notes : [];
+                              return { ...prev, notes: [...prevNotes, newNote] } as any;
+                            });
+                          }
+                          setShowAddWpNoteModal(false);
+                          setAddWpNoteSubmitting(false);
+                          setAddWpNoteText('');
+                          setAddNoteOrderId(null);
+                          // Optional: toast/alert minimal
+                          // alert('Notița a fost adăugată local. API-ul urmează.');
+                        } catch (e) {
+                          setAddWpNoteError('A apărut o eroare locală.');
+                          setAddWpNoteSubmitting(false);
+                        }
+                      }}
+                    >
+                      {addWpNoteSubmitting ? 'Se trimite…' : 'Trimite'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Retrimitere grafică modal */}
+            {showResendGraphicModal && (
+              <div className="fixed inset-0 z-[60]">
+                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }} />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="w-[96vw] sm:w-[600px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
+                    <div className="p-3 border-b border-border flex items-center justify-between">
+                      <div className="font-semibold">Retrimitere grafică {resendOrder ? `#${resendOrder.ID}` : ''}</div>
+                      <Button variant="ghost" size="sm" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="p-3 space-y-3 text-sm">
+                      <div className="flex flex-col gap-2">
+                        <label className="inline-flex items-center gap-2 select-none">
+                          <input type="checkbox" className="h-4 w-4" checked={resendViaEmail} onChange={(e) => setResendViaEmail(e.target.checked)} disabled={resendSubmitting} />
+                          <span className="inline-flex items-center gap-1"><Mail className="w-4 h-4" /> Email</span>
+                        </label>
+                        <label className="inline-flex items-center gap-2 select-none">
+                          <input type="checkbox" className="h-4 w-4" checked={resendViaSMS} onChange={(e) => setResendViaSMS(e.target.checked)} disabled={resendSubmitting} />
+                          <span className="inline-flex items-center gap-1"><MessageSquare className="w-4 h-4" /> SMS</span>
+                        </label>
+                        <label className="inline-flex items-center gap-2 select-none">
+                          <input type="checkbox" className="h-4 w-4" checked={resendViaWhatsApp} onChange={(e) => setResendViaWhatsApp(e.target.checked)} disabled={resendSubmitting} />
+                          <span className="inline-flex items-center gap-1"><MessageCircle className="w-4 h-4" /> WhatsApp</span>
+                        </label>
+                        <div className="text-[12px] text-muted-foreground">Alege canalele pentru retrimiterea graficii. Mesajul de mai jos va fi folosit la trimitere.</div>
+                      </div>
+                      <div>
+                        <Label htmlFor="resend-msg" className="text-sm">Mesaj</Label>
+                        <textarea id="resend-msg" className="mt-1 w-full min-h-[140px] p-2 border rounded bg-background text-foreground border-input text-sm" placeholder="Scrie mesajul care va fi trimis..." value={resendMessage} onChange={(e) => setResendMessage(e.target.value)} disabled={resendSubmitting} />
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }}>Renunță</Button>
+                      <Button size="sm" onClick={() => { if (resendSubmitting) return; setResendSubmitting(true); setTimeout(() => { setResendSubmitting(false); setShowResendGraphicModal(false); setResendOrder(null); }, 300); }}>
+                        {resendSubmitting ? 'Se trimite…' : 'Trimite'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Email compose modal (UI only) */}
+            {showEmailSendModal && (
+              <div className="fixed inset-0 z-[60]">
+                {/* Backdrop closes only this modal */}
+                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }} />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="w-[96vw] sm:w-[640px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
+                    <div className="p-3 border-b border-border flex items-center justify-between">
+                      <div className="font-semibold">Trimite email</div>
+                      <Button variant="ghost" size="sm" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="p-3 space-y-3 text-sm">
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <Label htmlFor="email-to" className="text-sm">Către</Label>
+                          <input id="email-to" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} disabled={emailSubmitting} />
+                        </div>
+                        <div>
+                          <Label htmlFor="email-from" className="text-sm">De la</Label>
+                          <input id="email-from" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} disabled={emailSubmitting} />
+                        </div>
+                        <div>
+                          <Label htmlFor="email-subject" className="text-sm">Subiect</Label>
+                          <input id="email-subject" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} disabled={emailSubmitting} />
+                        </div>
+                        <div>
+                          <Label htmlFor="email-message" className="text-sm">Mesaj</Label>
+                          <textarea id="email-message" className="mt-1 w-full min-h-[160px] p-2 border rounded bg-background text-foreground border-input text-sm" placeholder="Scrie mesajul aici..." value={emailMessage} onChange={(e) => setEmailMessage(e.target.value)} disabled={emailSubmitting} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }}>Renunță</Button>
+                      <Button size="sm"
+                        disabled={emailSubmitting || !isLikelyValidEmail(emailTo) || !isLikelyValidEmail(emailFrom)}
+                        onClick={() => {
+                          if (emailSubmitting) return;
+                          setEmailSubmitting(true);
+                          setTimeout(() => {
+                            setEmailSubmitting(false);
+                            setShowEmailSendModal(false);
+                            setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage('');
+                          }, 300);
+                        }}
+                      >
+                        {emailSubmitting ? 'Se trimite…' : 'Trimite'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AWB Ticket modal (DPD backline) */}
+            {showAwbTicketModal && (
+              <div className="fixed inset-0 z-[60]">
+                {/* Backdrop closes only this modal */}
+                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }} />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
+                  <div className="w-[96vw] sm:w-[680px] md:w-[760px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
+                    <div className="p-3 border-b border-border flex items-center justify-between">
+                      <div className="font-semibold">Trimite tichet DPD</div>
+                      <Button variant="ghost" size="sm" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="p-3 space-y-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-muted-foreground">Către</div>
+                        <div className="font-medium select-all">backline@dpd.ro</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-muted-foreground">CC</div>
+                        <div className="font-medium select-all">valentina.botan@dpd.ro</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-muted-foreground">Subiect</div>
+                        <div className="font-medium truncate max-w-[70%]" title={(() => {
+                          const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                          const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                          const nm = `${first} ${last}`.trim() || '-';
+                          const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
+                          const awb = awbInfo?.awb || 'AWB';
+                          return `${awb} - Problema comanda ${nm} ${id}`;
+                        })()}>
+                          {(() => {
+                            const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                            const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                            const nm = `${first} ${last}`.trim() || '-';
+                            const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
+                            const awb = awbInfo?.awb || 'AWB';
+                            return `${awb} - Problema comanda ${nm} ${id}`;
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Mesaj */}
+                      <div>
+                        <Label className="text-sm">Mesaj</Label>
+                        {/* Toolbar */}
+                        <div className="mt-1 mb-2 flex flex-wrap gap-1">
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('bold'); }}>B</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2 italic" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('italic'); }}>I</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2 underline" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('underline'); }}>U</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('insertUnorderedList'); }}>• Listă</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('insertOrderedList'); }}>1. Listă</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('formatBlock', false, 'h2'); }}>H2</Button>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('formatBlock', false, 'h3'); }}>H3</Button>
+                          <select
+                            className="h-7 px-2 border border-input rounded text-xs bg-background text-foreground"
+                            disabled={sendTicketSubmitting}
+                            defaultValue="normal"
+                            onChange={(e) => {
+                              awbEditorRef.current?.focus();
+                              if (e.target.value === 'normal') {
+                                document.execCommand('removeFormat');
+                              } else if (e.target.value === 'small') {
+                                document.execCommand('fontSize', false, '2');
+                              } else if (e.target.value === 'medium') {
+                                document.execCommand('fontSize', false, '3');
+                              } else if (e.target.value === 'large') {
+                                document.execCommand('fontSize', false, '5');
+                              }
+                            }}
+                          >
+                            <option value="normal">Text</option>
+                            <option value="small">Mic</option>
+                            <option value="medium">Mediu</option>
+                            <option value="large">Mare</option>
+                          </select>
+                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
+                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('removeFormat'); }}>Curăță</Button>
+                        </div>
+                        {/* Editor */}
+                        <div
+                          ref={awbEditorRef}
+                          className="min-h-[200px] p-2 border rounded bg-background text-foreground border-input text-sm focus:outline-none"
+                          contentEditable={!sendTicketSubmitting}
+                          onInput={(e) => setAwbTicketMessage((e.target as HTMLDivElement).innerHTML)}
+                          dangerouslySetInnerHTML={{ __html: awbTicketMessage || '' }}
+                        />
+                        <div className="mt-2 flex items-center justify-between">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={sendTicketSubmitting || awbTicketGenerating}
+                            onClick={() => {
+                              try {
+                                setAwbTicketGenerating(true);
+                                const awb = awbInfo?.awb || '-';
+                                const courier = awbInfo?.courier || 'DPD';
+                                const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                                const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                                const nume = `${first} ${last}`.trim() || '-';
+                                const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
+                                const cur = (awbData as any)?.current_status || '-';
+                                const html = [
+                                  `<p>Bună ziua,</p>`,
+                                  `<p>Vă rog sprijin pentru AWB <strong>${awb}</strong> (${courier}).</p>`,
+                                  `<p>Comandă: <strong>${id}</strong> • Client: <strong>${nume}</strong>.</p>`,
+                                  `<p>Status curent: <em>${cur}</em>.</p>`,
+                                  `<p>Descriere problemă: <span style="color:#666">[vă rugăm completați aici detaliile]</span>.</p>`,
+                                  `<p>Mulțumesc!</p>`
+                                ].join('');
+                                setAwbTicketMessage(html);
+                              } finally {
+                                setAwbTicketGenerating(false);
+                              }
+                            }}
+                          >
+                            {awbTicketGenerating ? 'Se generează…' : 'Generează cu AI'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }}>Renunță</Button>
+                      <Button size="sm" onClick={() => { if (sendTicketSubmitting) return; setSendTicketSubmitting(true); setTimeout(() => { setSendTicketSubmitting(false); setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); }, 300); }}>
+                        {sendTicketSubmitting ? 'Se trimite…' : 'Trimite'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AWB tracking off-canvas (right, full height) */}
+            {showAwbModal && (
+              <div className="fixed inset-0 z-50">
+                {/* Backdrop */}
+                <div
+                  className="absolute inset-0 bg-black/30"
+                  onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); setShowAddWpNoteModal(false); setAddNoteOrderId(null); setShowAwbTicketModal(false); }}
+                />
+                {/* Panel */}
+                <div className="absolute right-0 top-0 h-full w-full sm:w-[720px] md:w-[780px] bg-white border-l border-border shadow-lg flex flex-col">
+                  {/* Header */}
+                  <div className="p-3 border-b border-border flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">Istoric AWB {awbInfo?.awb ? `#${awbInfo.awb}` : ''} {awbInfo?.courier ? `(${awbInfo.courier})` : ''}</div>
+                      {awbOrder && (
+                        <div className="mt-1 text-sm flex items-center gap-3 flex-wrap">
+                          <span className="font-medium truncate inline-flex items-center gap-1">
+                            {(() => {
+                              const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                              const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                              const nm = `${first} ${last}`.trim();
+                              return nm || '-';
+                            })()}
+                            {(() => {
+                              const v: any = (awbOrder as any)?.fara_factura_in_colet;
+                              const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                              return isGift ? (
+                                <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />
+                              ) : null;
+                            })()}
+                          </span>
+                          {(() => {
+                            const comp = (awbOrder?.billing_details?._billing_numefirma || '').trim();
+                            return comp ? (
+                              <div className="text-xs text-muted-foreground" title={comp}>
+                                Firma: <span className="font-medium text-foreground">{comp}</span>
+                              </div>
+                            ) : null;
+                          })()}
+                          {(() => {
+                            const raw = awbOrder?.billing_details?._billing_phone || awbOrder?.shipping_details?._shipping_phone || '';
+                            const display = String(raw || '').trim();
+                            const tel = display.replace(/[^+\d]/g, '');
+                            return display ? (
+                              <a href={`tel:${tel}`} className="inline-flex items-center gap-1 text-primary hover:underline" title={`Sună: ${display}`}>
+                                <PhoneCall className="w-4 h-4" />
+                                <span className="truncate">{display}</span>
+                              </a>
+                            ) : null;
+                          })()}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => awbOrder && window.open(`https://darurialese.com/wp-admin/post.php?post=${awbOrder.ID}&action=edit`, '_blank')}
+                            title={`Deschide comanda #${awbOrder?.ID}`}
+                          >
+                            #{awbOrder?.ID}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {(() => {
+                        const courier = (awbInfo?.courier || '').toString().toLowerCase();
+                        if (courier.includes('dpd')) {
+                          return (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2"
+                              title="Trimite tichet DPD"
+                              onClick={() => { setAwbTicketMessage(""); setAwbTicketGenerating(false); setShowAwbTicketModal(true); }}
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Trimite tichet
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })()}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); setShowAddWpNoteModal(false); setAddNoteOrderId(null); setShowAwbTicketModal(false); }}
+                        title="Închide"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Body: split height in 2 panes with independent scroll */}
+                  <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
+                    {awbLoading ? (
+                      <div className="p-4 text-sm text-muted-foreground">Se încarcă istoricul...</div>
+                    ) : awbError ? (
+                      <div className="p-4 text-sm text-red-600">{awbError}</div>
+                    ) : awbData ? (
+                      <>
+                        {/* Wizard steps above Curier */}
+                        <div className="border border-border rounded-md p-3 bg-white">
+                          {(() => {
+                            // Derive step dates from notes
+                            const normalize = (s: any) => {
+                              try {
+                                return String(s || '')
+                                  .normalize('NFD')
+                                  .replace(/[\u0300-\u036f]/g, '')
+                                  .toLowerCase();
+                              } catch {
+                                return String(s || '').toLowerCase();
+                              }
+                            };
+                            let gotGraphicsAt: string | null = null;
+                            let approvedGraphicsAt: string | null = null;
+                            try {
+                              const notesArr = Array.isArray(awbOrder?.notes) ? (awbOrder as any).notes : [];
+                              const sortedNotes = [...notesArr];
+                              try {
+                                sortedNotes.sort((a: any, b: any) => new Date(a?.comment_date || '').getTime() - new Date(b?.comment_date || '').getTime());
+                              } catch {}
+                              for (const n of sortedNotes) {
+                                const txt = normalize(n?.comment_content);
+                                if (!gotGraphicsAt && txt.includes('starea comenzii a fost modificata') && txt.includes('din in procesare in aprobare client')) {
+                                  gotGraphicsAt = n?.comment_date || null;
+                                }
+                                if (!approvedGraphicsAt && txt.includes('din aprobare client in productie')) {
+                                  approvedGraphicsAt = n?.comment_date || null;
+                                }
+                                if (gotGraphicsAt && approvedGraphicsAt) break;
+                              }
+                            } catch {}
+                            const steps = [
+                              { key: 'order', label: 'A dat comanda', sub: awbOrder?.post_date ? formatDate(awbOrder.post_date) : null },
+                              { key: 'confirm', label: 'Confirmată comanda', sub: awbOrder?.confirmare_comanda || null },
+                              { key: 'got_graphics', label: 'A primit grafica', sub: gotGraphicsAt },
+                              { key: 'approved_graphics', label: 'A aprobat grafica', sub: approvedGraphicsAt },
+                              { key: 'picked_up', label: 'Preluat curierul', sub: (() => {
+                                try {
+                                  const td = Array.isArray(awbData?.tracking_data) ? awbData.tracking_data : [];
+                                  if (td.length === 0) return null;
+                                  const asc = [...td].sort((a: any, b: any) => new Date(a?.timestamp || '').getTime() - new Date(b?.timestamp || '').getTime());
+                                  const firstTs = asc[0]?.timestamp;
+                                  return firstTs || null;
+                                } catch { return null; }
+                              })() }
+                            ];
+                            return (
+                              <>
+                                <div className="mb-2 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                  {awbOrder?.expediere && (
+                                    <div>
+                                      Propus pentru expediere: <span className="font-medium">{awbOrder.expediere}</span>
+                                    </div>
+                                  )}
+
+                                </div>
+                                <div className="flex items-center">
+                                  {steps.map((s, idx) => {
+                                    const active = Boolean(s.sub);
+                                    return (
+                                      <React.Fragment key={s.key}>
+                                        <div className="flex flex-col items-center min-w-0">
+                                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold ${active ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                            {idx + 1}
+                                          </div>
+                                          <div className="mt-1 text-[11px] font-medium text-center max-w-[110px] " title={s.label}>{s.label}</div>
+                                          <div className="text-[10px] text-muted-foreground max-w-[100px] text-center truncate" title={s.sub || ''}>
+                                            {(() => {
+                                              const raw: any = s.sub;
+                                              if (!raw) return '—';
+                                              const str = String(raw).trim();
+                                              const pad = (n: number) => String(n).padStart(2, '0');
+                                              const parseParts = (v: string) => {
+                                                try {
+                                                  // Pattern 1: DD.MM.YYYY[ HH:mm[:ss]]
+                                                  const m1 = v.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?$/);
+                                                  if (m1) {
+                                                    return { dd: m1[1], mm: m1[2], yyyy: m1[3], hh: m1[4] || undefined, min: m1[5] || undefined } as any;
+                                                  }
+                                                  // Pattern 2: YYYY-MM-DD[ T]HH:mm[:ss][timezone]
+                                                  const m2 = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?(?:[Zz]|[+\-]\d{2}:?\d{2})?)?$/);
+                                                  if (m2) {
+                                                    return { dd: m2[3], mm: m2[2], yyyy: m2[1], hh: m2[4] || undefined, min: m2[5] || undefined } as any;
+                                                  }
+                                                  // Fallback: Date()
+                                                  const d = new Date(v.replace(' ', 'T'));
+                                                  if (!isNaN(d.getTime())) {
+                                                    return { dd: pad(d.getDate()), mm: pad(d.getMonth() + 1), yyyy: String(d.getFullYear()), hh: pad(d.getHours()), min: pad(d.getMinutes()) } as any;
+                                                  }
+                                                } catch {}
+                                                return null;
+                                              };
+                                              const p: any = parseParts(str);
+                                              if (!p) return str;
+                                              return (<><span className="font-semibold">{p.dd}.{p.mm}</span>.{p.yyyy}{p.hh ? `, ${p.hh}:${p.min}` : ''}</>);
+                                            })()}
+                                          </div>
+                                        </div>
+                                        {idx < steps.length - 1 && (
+                                          <div className={`flex-1 h-0.5 mx-2 ${steps[idx + 1].sub ? 'bg-green-400' : 'bg-gray-200'}`}></div>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        {/* Curier (AWB tracking) pane */}
+                        <div className="flex-1 min-h-0 border border-border rounded-md flex flex-col overflow-hidden">
+                          <div className="px-3 py-2 border-b border-border bg-white sticky top-0 z-10 flex items-center justify-between">
+                            <div className="font-semibold text-sm">Curier</div>
+                            <div className="text-xs text-muted-foreground">
+                              <span className="mr-3"><span className="text-muted-foreground">Curent:</span> <span className="font-medium">{awbData.current_status || '-'}</span></span>
+                              <span className="mr-3"><span className="text-muted-foreground">Livrat:</span> <span className="font-medium">{awbData.delivered ? 'da' : 'nu'}</span></span>
+                              {awbData.courier && (<span><span className="text-muted-foreground">Curier:</span> <span className="font-medium">{awbData.courier}</span></span>)}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                            {Array.isArray(awbData.tracking_data) && awbData.tracking_data.length > 0 ? (
+                              <div className="space-y-2">
+                                {(() => {
+                                  const sorted = [...awbData.tracking_data].sort((a: any, b: any) => {
+                                    const ta = new Date(a?.timestamp || '').getTime();
+                                    const tb = new Date(b?.timestamp || '').getTime();
+                                    return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+                                  });
+                                  return sorted.map((t: any, idx: number) => (
+                                    <div key={idx} className={`p-2 rounded-md border ${idx === 0 ? 'border-green-500 bg-green-50/40' : 'border-border'}`}>
+                                      <div className={`text-xs mb-1 ${idx === 0 ? 'text-green-700' : 'text-muted-foreground'}`}>{t.timestamp} {t.location ? `• ${t.location}` : ''}</div>
+                                      <div className={`text-sm ${idx === 0 ? 'font-bold' : 'font-medium'}`}>{t.status}</div>
+                                      {t.comment && (
+                                        <div className="text-xs whitespace-pre-wrap text-muted-foreground mt-1">{t.comment}</div>
+                                      )}
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Nu există înregistrări de tracking.</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Notițe pane */}
+                        <div className="flex-1 min-h-0 border border-border rounded-md flex flex-col overflow-hidden">
+                          <div className="px-3 py-2 border-b border-border bg-white sticky top-0 z-10 flex items-center justify-between">
+                            <div className="font-semibold text-sm">Notițe comandă {awbOrder ? `#${awbOrder.ID}` : ''}</div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2"
+                              title="Adaugă notiță WordPress"
+                              onClick={() => { setAddWpNoteText(''); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(awbOrder?.ID || null); setShowAddWpNoteModal(true); }}
+                            >
+                              <Plus className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                            {Array.isArray(awbOrder?.notes) && awbOrder!.notes.length > 0 ? (
+                              awbOrder!.notes.map((n, idx) => (
+                                <div key={idx} className="p-2 rounded-md border border-border">
+                                  <div className="text-xs text-muted-foreground mb-1">{n.comment_date}</div>
+                                  <div className="text-sm whitespace-pre-wrap break-words">{n.comment_content}</div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4 text-sm text-muted-foreground">Selectează un AWB pentru a vedea istoricul.</div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-3 border-t border-border text-right">
+                    <Button variant="outline" size="sm" onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); }}>Închide</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Old grid disabled per new requirements */}
+            {displayedComenzi.length > 0 && false && (
                 <div
                     className={`${desktopCols === 2
                         ? 'md:columns-2'
@@ -1476,6 +2943,57 @@ export const Content = ({
           )}
         </div>
       </main>
+
+      {/* Fixed bottom toolbar: search + quick status buttons */}
+      <div className="fixed bottom-0 left-32 right-0 z-40 bg-white dark:bg-[#020817] border-t border-border">
+        <div className="flex items-center gap-2 p-2">
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={zonaActiva === 'precomanda' ? 'default' : 'outline'}
+              onClick={() => selecteazaZona('Precomanda')}
+              className="flex items-center gap-1"
+            >
+              <CalendarClock className="w-4 h-4" />
+              <span>Precomandă</span>
+              <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-muted px-1 text-xs text-black ">
+                {statsData.find(s => s.title === 'Precomanda')?.value ?? 0}
+              </span>
+            </Button>
+            <Button
+              size="sm"
+              variant={zonaActiva === 'backlines' ? 'default' : 'outline'}
+              onClick={() => selecteazaZona('Backlines')}
+              className="flex items-center gap-1"
+            >
+              <Layers className="w-4 h-4" />
+              <span>Backlines</span>
+              <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-muted px-1 text-xs text-black">
+                {statsData.find(s => s.title === 'Backlines')?.value ?? 0}
+              </span>
+            </Button>
+            <Button
+              size="sm"
+              variant={zonaActiva === 'confirmare' ? 'default' : 'outline'}
+              onClick={() => selecteazaZona('Confirmare')}
+              className="flex items-center gap-1"
+            >
+              <BadgeCheck className="w-4 h-4" />
+              <span>Confirmare</span>
+              <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-muted px-1 text-xs text-black">
+                {statsData.find(s => s.title === 'Confirmare')?.value ?? 0}
+              </span>
+            </Button>
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Caută comenzi după nume sau ID..."
+            className="ml-2 p-2 border rounded-md w-full text-sm bg-background text-foreground border-input placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
 
       {/* Docked Chat cu Grafica */}
       {showChat && (

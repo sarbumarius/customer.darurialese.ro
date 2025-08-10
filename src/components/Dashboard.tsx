@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Package, Timer, Check, PlayCircle, RefreshCw } from "lucide-react";
+import { Package, Timer, Check, PlayCircle, RefreshCw, PhoneCall, Cog, HelpCircle, Clock, CreditCard, CheckCircle2, XCircle, ImageOff, Layers, CalendarClock, BadgeCheck } from "lucide-react";
 import { WireframeBackground } from "@/components/WireframeBackground";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -9,32 +9,30 @@ import { Button } from "@/components/ui/button";
 import { DashboardProps, StatItem, PontajData, Comanda, WorkHistoryItem } from "@/types/dashboard";
 
 const API_BASE = 'https://crm.actium.ro';
-const EXTERNAL_API_URL = `${API_BASE}/api/statusurigravare`;
+const EXTERNAL_API_URL = `${API_BASE}/api/statusuricustomer`;
 const PONTAJ_API_URL   = `${API_BASE}/api/azi-nou-angajat`;
-const COMENZI_API_URL  = `${API_BASE}/api/comenzi-daruri-alese-gravare`;
+const COMENZI_API_URL  = `${API_BASE}/api/comenzi-daruri-alese-customer`;
 const TIMER_START_API_URL = `${API_BASE}/api/action-timer-start-new`;
 const TIMER_STOP_API_URL = `${API_BASE}/api/action-timer-stop-new`;
 const WORK_HISTORY_API_URL = `${API_BASE}/api/zile-muncite-luna-curenta-nou`;
 
 const initialStatsData: StatItem[] = [
-    { title: "Gravare", value: 0, icon: Package, color: "bg-purple-500", group: 'right' },
-
-
-    { title: "FAN", value: 0, icon: Package, color: "bg-blue-500", group: 'left' },
-    { title: "DPD", value: 0, icon: Package, color: "bg-red-500", group: 'left' },
-
-    { title: "Productie", value: 0, icon: Package, color: "bg-green-500", group: 'left' },
-    { title: "Legatorie", value: 0, icon: Package, color: "bg-indigo-500", group: 'right' },
-
-    { title: "Aprobare client", value: 0, icon: Timer, color: "bg-orange-500", group: 'right' },
-    { title: "Procesare", value: 0, icon: null, color: "bg-blue-500", group: 'right' },
-    { title: "In asteptare", value: 0, icon: null, color: "bg-yellow-500", group: 'right' },
-    { title: "Plata in asteptare", value: 0, icon: null, color: "bg-red-500", group: 'right' }
+    { title: "De sunat", value: 0, icon: PhoneCall, color: "bg-purple-500", group: 'right' },
+    { title: "Procesare", value: 0, icon: Cog, color: "bg-blue-500", group: 'right' },
+    { title: "Neconfirmate", value: 0, icon: HelpCircle, color: "bg-gray-500", group: 'right' },
+    { title: "In asteptare", value: 0, icon: Clock, color: "bg-yellow-500", group: 'right' },
+    { title: "Plata in asteptare", value: 0, icon: CreditCard, color: "bg-red-500", group: 'right' },
+    { title: "Aprobare", value: 0, icon: CheckCircle2, color: "bg-orange-500", group: 'right' },
+    { title: "Gresite", value: 0, icon: XCircle, color: "bg-pink-500", group: 'right' },
+    { title: "Lipsa poze", value: 0, icon: ImageOff, color: "bg-indigo-500", group: 'right' },
+    { title: "Backlines", value: 0, icon: Layers, color: "bg-teal-500", group: 'right' },
+    { title: "Precomanda", value: 0, icon: CalendarClock, color: "bg-green-500", group: 'right' },
+    { title: "Confirmare", value: 0, icon: BadgeCheck, color: "bg-blue-700", group: 'right' }
 ];
 
 export const Dashboard = ({ user, onLogout }: DashboardProps) => {
     const [zonaActiva, setZonaActiva] = useState(() =>
-        localStorage.getItem('zonaActiva') || 'gravare'
+        localStorage.getItem('zonaActiva') || 'desunat'
     );
     const [statsData, setStatsData] = useState<StatItem[]>(initialStatsData);
     const [isLoading, setIsLoading] = useState(false);
@@ -98,7 +96,26 @@ export const Dashboard = ({ user, onLogout }: DashboardProps) => {
             headers: { 'Authorization': token ? `Bearer ${token}` : '', 'Accept': 'application/json' }
         });
         if (!res.ok) throw new Error('Eroare comenzi');
-        return await res.json();
+        const data = await res.json();
+        // Normalize API response to the UI-expected shape
+        if (!Array.isArray(data)) return [] as any[];
+        return data.map((o: any) => {
+            const produseFinale = Array.isArray(o.produse) ? o.produse : (Array.isArray(o.produse_finale) ? o.produse_finale : []);
+            const idComanda = o.id_comanda ?? (o.ID != null ? String(o.ID) : undefined);
+            const dataComanda = o.data_comanda ?? o.post_date ?? undefined;
+            return {
+                ...o,
+                id_comanda: idComanda,
+                data_comanda: dataComanda,
+                produse_finale: produseFinale,
+                // Safe defaults for optional arrays used in UI
+                notes: Array.isArray(o.notes) ? o.notes : [],
+                fisieregrafica: Array.isArray(o.fisieregrafica) ? o.fisieregrafica : [],
+                download_fisiere_grafica: Array.isArray(o.download_fisiere_grafica) ? o.download_fisiere_grafica : [],
+                previzualizare_galerie: Array.isArray(o.previzualizare_galerie) ? o.previzualizare_galerie : [],
+                lipsuri: Array.isArray(o.lipsuri) ? o.lipsuri : [],
+            };
+        });
     };
 
     const checkPontaj = async () => {
@@ -160,15 +177,17 @@ export const Dashboard = ({ user, onLogout }: DashboardProps) => {
             const data = await getStatusuri(zona);
             const newStatsData = [...initialStatsData];
             if (data.statusuri) {
-                newStatsData.find(stat => stat.title === "Productie")!.value = data.statusuri.debitare?.total || 0;
-                newStatsData.find(stat => stat.title === "FAN")!.value = data.statusuri.fan?.total || 0;
-                newStatsData.find(stat => stat.title === "DPD")!.value = data.statusuri.dpd?.total || 0;
-                newStatsData.find(stat => stat.title === "Aprobare client")!.value = data.statusuri.aprobareclient?.total || 0;
+                newStatsData.find(stat => stat.title === "De sunat")!.value = data.statusuri.de_sunat?.total || 0;
                 newStatsData.find(stat => stat.title === "Procesare")!.value = data.statusuri.procesare?.total || 0;
-                newStatsData.find(stat => stat.title === "In asteptare")!.value = data.statusuri.onhold?.total || 0;
-                newStatsData.find(stat => stat.title === "Plata in asteptare")!.value = data.statusuri.pending?.total || 0;
-                newStatsData.find(stat => stat.title === "Gravare")!.value = data.statusuri.gravare?.total || 0;
-                newStatsData.find(stat => stat.title === "Legatorie")!.value = data.statusuri.legatorie?.total || 0;
+                newStatsData.find(stat => stat.title === "Neconfirmate")!.value = data.statusuri.neconfirmate?.total || 0;
+                newStatsData.find(stat => stat.title === "In asteptare")!.value = data.statusuri.inasteptare?.total || 0;
+                newStatsData.find(stat => stat.title === "Plata in asteptare")!.value = data.statusuri.platainasteptare?.total || 0;
+                newStatsData.find(stat => stat.title === "Aprobare")!.value = data.statusuri.aprobare?.total || 0;
+                newStatsData.find(stat => stat.title === "Gresite")!.value = data.statusuri.gresite?.total || 0;
+                newStatsData.find(stat => stat.title === "Lipsa poze")!.value = data.statusuri.lipsapoze?.total || 0;
+                newStatsData.find(stat => stat.title === "Backlines")!.value = data.statusuri.backlines?.total || 0;
+                newStatsData.find(stat => stat.title === "Precomanda")!.value = data.statusuri.precomanda?.total || 0;
+                newStatsData.find(stat => stat.title === "Confirmare")!.value = data.statusuri.confirmare?.total || 0;
             }
             setStatsData(newStatsData);
         } catch (error) {
