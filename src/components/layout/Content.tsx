@@ -897,7 +897,7 @@ export const Content = ({
   return (
     <>
       <main className={`${showChat ? 'pr-[15vw]' : ''} ml-32 mt-20 flex-1 backgroundculiniute pb-20`}>
-        <div className="grid grid-cols-1 sm:grid-cols-8 gap-2  relative p-3 border border-b-1 border-border bg-white dark:bg-[#020817]  ">
+        <div className="sticky top-20 z-40 grid grid-cols-1 sm:grid-cols-8 gap-2 relative p-3 border border-b-1 border-border bg-white dark:bg-[#020817] shadow-sm">
           {/* Mobile toggle button for expanding/collapsing statuses */}
           <div className="sm:hidden w-full mb-2 flex justify-center -mt-8">
             <Button 
