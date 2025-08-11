@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Info, Package, AlertTriangle, ShoppingCart, Eye, Printer, Gift, Database, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, MessageSquare, Send, PhoneCall, CalendarClock, Layers, BadgeCheck, Plus, Mail, MessageCircle, ImageOff, Cog } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -108,6 +108,13 @@ export const Content = ({
   const [addWpNoteSubmitting, setAddWpNoteSubmitting] = useState(false);
   const [addWpNoteError, setAddWpNoteError] = useState<string | null>(null);
   const [addNoteOrderId, setAddNoteOrderId] = useState<number | null>(null);
+  // Status filter for backlines
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  // Confirmation modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmOrder, setConfirmOrder] = useState<Comanda | null>(null);
+  const [activeAddressTab, setActiveAddressTab] = useState<'shipping' | 'billing'>('shipping');
+  const [activeConfirmTab, setActiveConfirmTab] = useState<'confirmare' | 'sms' | 'notite' | 'puncte' | 'persoane'>('confirmare');
   // AWB tracking modal state
   const [showAwbModal, setShowAwbModal] = useState(false);
   const [awbLoading, setAwbLoading] = useState(false);
@@ -121,12 +128,15 @@ export const Content = ({
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-  
+
   // Ticket modal for AWB (DPD backline)
   const [showAwbTicketModal, setShowAwbTicketModal] = useState(false);
   const [sendTicketSubmitting, setSendTicketSubmitting] = useState(false);
   const [awbTicketMessage, setAwbTicketMessage] = useState<string>("");
   const [awbTicketGenerating, setAwbTicketGenerating] = useState<boolean>(false);
+  const [awbTicketTo, setAwbTicketTo] = useState<string>("backline@dpd.ro");
+  const [awbTicketCc, setAwbTicketCc] = useState<string>("valentina.botan@dpd.ro, manager@darurialese.ro");
+  const [awbTicketSubject, setAwbTicketSubject] = useState<string>("");
   const awbEditorRef = useRef<HTMLDivElement | null>(null);
 
   // Follow up email modal (Lipsa poze)
@@ -312,6 +322,11 @@ export const Content = ({
       });
     }
 
+    // Filter by status for backlines
+    if (selectedStatus && zonaActiva === 'backlines') {
+      filtered = filtered.filter(comanda => comanda.post_status === selectedStatus);
+    }
+
     // Filter by tip grafica (gravare/printare/all)
     if (filterTipGrafica === 'gravare') {
       filtered = filtered.filter(comanda => !!comanda.gravare);
@@ -346,7 +361,7 @@ export const Content = ({
     }
 
     return filtered;
-  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica, zonaActiva]);
+  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica, zonaActiva, selectedStatus]);
 
 
   // Extract unique shipping dates
@@ -358,6 +373,24 @@ export const Content = ({
     });
     return Array.from(dates).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
   }, [comenzi, formatDate]);
+
+  // Extract unique statuses with counts for backlines
+  const statusesWithCounts = React.useMemo(() => {
+    if (zonaActiva !== 'backlines') return [];
+
+    const statusMap = new Map<string, number>();
+
+    // Count occurrences of each status
+    comenzi.forEach(comanda => {
+      const status = comanda.post_status || 'Unknown';
+      statusMap.set(status, (statusMap.get(status) || 0) + 1);
+    });
+
+    // Convert to array of objects
+    return Array.from(statusMap.entries())
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count); // Sort by count descending
+  }, [comenzi, zonaActiva]);
 
   // Keyboard navigation for gallery (left/right)
   useEffect(() => {
@@ -377,10 +410,11 @@ export const Content = ({
     return () => window.removeEventListener('keydown', handler);
   }, [showGalleryModal, selectedImage, selectedImageIndex, galleryImages]);
 
-  // Reset movingCommandId when zone changes
+  // Reset movingCommandId and selectedStatus when zone changes
   useEffect(() => {
     setMovingCommandId(null);
     setStartingCommandId(null);
+    setSelectedStatus(null);
   }, [zonaActiva]);
 
   // Init desktop cols from localStorage and listen for changes from Header
@@ -754,6 +788,251 @@ export const Content = ({
     } finally {
       // Clear the moving command ID regardless of success or failure
       //setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Lipsa Poze" button click
+  const handleMutaLipsaPozeClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaLipsaPoze/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Lipsa Poze');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Lipsa Poze cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Lipsa Poze:', error);
+      alert('A apărut o eroare la mutarea comenzii în Lipsa Poze. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Procesare" button click
+  const handleMutaProcesareClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaProcesare/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Procesare');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Procesare cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Procesare:', error);
+      alert('A apărut o eroare la mutarea comenzii în Procesare. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Precomanda" button click
+  const handleMutaPrecomandaClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaPrecomanda/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Precomandă');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Precomandă cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Precomandă:', error);
+      alert('A apărut o eroare la mutarea comenzii în Precomandă. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Anulare" button click
+  const handleMutaAnulareClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaAnulare/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Anulare');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Anulare cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Anulare:', error);
+      alert('A apărut o eroare la mutarea comenzii în Anulare. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Grafica Gresita" button click
+  const handleMutaGraficaGresitaClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaGraficaGresita/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Grafică Greșită');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Grafică Greșită cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Grafică Greșită:', error);
+      alert('A apărut o eroare la mutarea comenzii în Grafică Greșită. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Retrimitere Grafica" button click
+  const handleRetrimitereGraficaClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/retrimitereGrafica/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la retrimiterea graficii');
+      }
+
+      // Handle successful response
+      console.log('Grafica retrimisă cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la retrimiterea graficii:', error);
+      alert('A apărut o eroare la retrimiterea graficii. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
+    }
+  };
+
+  // Function to handle "Muta Productie" button click
+  const handleMutaProductieClick = async (comandaId: number) => {
+    try {
+      // Set the moving command ID to show loading state
+      setMovingCommandId(comandaId);
+
+      const response = await fetch(`https://crm.actium.ro/api/mutaProductie/${comandaId}`, {
+        method: 'GET',
+        headers: { 
+            'accept': 'application/json',
+        }
+      });
+
+      // Parse the response
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Eroare la mutarea comenzii în Producție');
+      }
+
+      // Handle successful response
+      console.log('Comanda mutată în Producție cu succes:', data);
+
+      // Refresh the data to reflect the changes
+      refreshComenzi();
+
+    } catch (error) {
+      console.error('Eroare la mutarea comenzii în Producție:', error);
+      alert('A apărut o eroare la mutarea comenzii în Producție. Vă rugăm să încercați din nou.');
+    } finally {
+      // Clear the moving command ID regardless of success or failure
+      setMovingCommandId(null);
     }
   };
 
@@ -1183,6 +1462,41 @@ export const Content = ({
             })()
           )}
 
+          {/* Backlines status filters */}
+          {zonaActiva === 'backlines' && statusesWithCounts.length > 0 && (
+            <div className="mt-2 p-2 border border-border rounded-md bg-white">
+              <div className="flex items-center gap-2 mb-1">
+                {selectedStatus && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setSelectedStatus(null)}
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    Resetează filtrul
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {statusesWithCounts.map(({ status, count }) => (
+                  <Badge 
+                    key={status} 
+                    variant={selectedStatus === status ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedStatus(selectedStatus === status ? null : status)}
+                  >
+                    {status.startsWith("wc-") 
+                      ? status.substring(3).split(/[-\s]+/).map(word => 
+                          word.charAt(0).toUpperCase() + word.slice(1)
+                        ).join(' ') 
+                      : status} ({count})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Orders table (replaces old grid) */}
             {displayedComenzi.length > 0 && (
               <div className="overflow-x-auto">
@@ -1549,15 +1863,15 @@ export const Content = ({
                                 >
                                   <PhoneCall className="w-4 h-4" />
                                 </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => alert('Ticket curier – în curând')}
-                                  title="Creează ticket curier"
-                                  aria-label="Creează ticket curier"
-                                >
-                                  <Send className="w-4 h-4" />
-                                </Button>
+                                {/*<Button*/}
+                                {/*  variant="outline"*/}
+                                {/*  size="sm"*/}
+                                {/*  onClick={() => alert('Ticket curier – în curând')}*/}
+                                {/*  title="Creează ticket curier"*/}
+                                {/*  aria-label="Creează ticket curier"*/}
+                                {/*>*/}
+                                {/*  <Send className="w-4 h-4" />*/}
+                                {/*</Button>*/}
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -1584,102 +1898,195 @@ export const Content = ({
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => alert('Procesare – în curând')}
+                                      onClick={() => handleMutaProcesareClick(c.ID)}
                                       title="Procesare"
                                       aria-label="Procesare"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Procesare</span>
-                                      <Cog className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Procesare</span>
+                                          <Cog className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="destructive"
                                       size="sm"
-                                      onClick={() => alert('Anulare – în curând')}
+                                      onClick={() => handleMutaAnulareClick(c.ID)}
                                       title="Anulează"
                                       aria-label="Anulează"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <X className="w-4 h-4" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                          <span>Se anulează...</span>
+                                        </div>
+                                      ) : (
+                                        <X className="w-4 h-4" />
+                                      )}
                                     </Button>
                                   </>
                                 ) : (zonaActiva === 'platainasteptare' || zonaActiva === 'inasteptare') ? (
-                                                                  <>
-                                                                    <Button
-                                                                      variant="outline"
-                                                                      size="sm"
-                                                                      onClick={() => alert('Precomanda – în curând')}
-                                                                      title="Precomanda"
-                                                                      aria-label="Precomanda"
-                                                                    >
-                                                                      <span>Precomanda</span>
-                                                                      <CalendarClock className="w-4 h-4 ml-1" />
-                                                                    </Button>
-                                                                    <Button
-                                                                      variant="outline"
-                                                                      size="sm"
-                                                                      onClick={() => alert('Lipsa poza – în curând')}
-                                                                      title="Lipsa poza"
-                                                                      aria-label="Lipsa poza"
-                                                                    >
-                                                                      <span>Lipsa poza</span>
-                                                                      <ImageOff className="w-4 h-4 ml-1" />
-                                                                    </Button>
-                                                                    <Button
-                                                                      variant="outline"
-                                                                      size="sm"
-                                                                      onClick={() => alert('Procesare – în curând')}
-                                                                      title="Procesare"
-                                                                      aria-label="Procesare"
-                                                                    >
-                                                                      <span>Procesare</span>
-                                                                      <Cog className="w-4 h-4 ml-1" />
-                                                                    </Button>
-                                                                    <Button
-                                                                      variant="destructive"
-                                                                      size="sm"
-                                                                      onClick={() => alert('Anulare – în curând')}
-                                                                      title="Anulează"
-                                                                      aria-label="Anulează"
-                                                                    >
-                                                                      <X className="w-4 h-4" />
-                                                                    </Button>
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
+                                      title="Precomanda"
+                                      aria-label="Precomanda"
+                                      disabled={movingCommandId === c.ID}
+                                    >
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Precomanda</span>
+                                          <CalendarClock className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleMutaLipsaPozeClick(c.ID)}
+                                      title="Lipsa poza"
+                                      aria-label="Lipsa poza"
+                                      disabled={movingCommandId === c.ID}
+                                    >
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se mută...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Lipsa poza</span>
+                                          <ImageOff className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleMutaProcesareClick(c.ID)}
+                                      title="Procesare"
+                                      aria-label="Procesare"
+                                      disabled={movingCommandId === c.ID}
+                                    >
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Procesare</span>
+                                          <Cog className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleMutaAnulareClick(c.ID)}
+                                      title="Anulează"
+                                      aria-label="Anulează"
+                                      disabled={movingCommandId === c.ID}
+                                    >
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                          <span>Se anulează...</span>
+                                        </div>
+                                      ) : (
+                                        <X className="w-4 h-4" />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
+                                      title="Confirmare"
+                                      aria-label="Confirmare"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </Button>
                                                                   </>
                                                                 ) : (zonaActiva === 'neconfirmate' || zonaActiva === 'desunat' || zonaActiva === 'procesare') ? (
                                                                   <>
                                                                     <Button
                                                                       variant="outline"
                                                                       size="sm"
-                                                                      onClick={() => alert('Precomanda – în curând')}
+                                                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
                                                                       title="Precomanda"
                                                                       aria-label="Precomanda"
+                                                                      disabled={movingCommandId === c.ID}
                                                                     >
-                                                                      <span>Precomanda</span>
-                                                                      <CalendarClock className="w-4 h-4 ml-1" />
+                                                                      {movingCommandId === c.ID ? (
+                                                                        <div className="flex items-center">
+                                                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                                                          <span>Se procesează...</span>
+                                                                        </div>
+                                                                      ) : (
+                                                                        <>
+                                                                          <span>Precomanda</span>
+                                                                          <CalendarClock className="w-4 h-4 ml-1" />
+                                                                        </>
+                                                                      )}
                                                                     </Button>
                                                                     <Button
                                                                       variant="outline"
                                                                       size="sm"
-                                                                      onClick={() => alert('Lipsa poza – în curând')}
+                                                                      onClick={() => handleMutaLipsaPozeClick(c.ID)}
                                                                       title="Lipsa poza"
                                                                       aria-label="Lipsa poza"
+                                                                      disabled={movingCommandId === c.ID}
                                                                     >
-                                                                      <span>Lipsa poza</span>
-                                                                      <ImageOff className="w-4 h-4 ml-1" />
+                                                                      {movingCommandId === c.ID ? (
+                                                                        <div className="flex items-center">
+                                                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                                                          <span>Se mută...</span>
+                                                                        </div>
+                                                                      ) : (
+                                                                        <>
+                                                                          <span>Lipsa poza</span>
+                                                                          <ImageOff className="w-4 h-4 ml-1" />
+                                                                        </>
+                                                                      )}
                                                                     </Button>
                                                                     {(zonaActiva !== 'neconfirmate' || motivesActiveCount >= 3) && (
                                                                       <Button
                                                                         variant="destructive"
                                                                         size="sm"
-                                                                        onClick={() => alert('Anulare – în curând')}
+                                                                        onClick={() => handleMutaAnulareClick(c.ID)}
                                                                         title="Anulează"
                                                                         aria-label="Anulează"
+                                                                        disabled={movingCommandId === c.ID}
                                                                       >
-                                                                        <X className="w-4 h-4" />
+                                                                        {movingCommandId === c.ID ? (
+                                                                          <div className="flex items-center">
+                                                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                                                            <span>Se anulează...</span>
+                                                                          </div>
+                                                                        ) : (
+                                                                          <X className="w-4 h-4" />
+                                                                        )}
                                                                       </Button>
                                                                     )}
                                                                     <Button
                                                                       variant="default"
                                                                       size="sm"
-                                                                      onClick={() => alert('Confirmare – în curând')}
+                                                                      onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
                                                                       title="Confirmare"
                                                                       aria-label="Confirmare"
                                                                     >
@@ -1691,53 +2098,79 @@ export const Content = ({
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => { 
-                                                                            const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
-                                                                            const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
-                                                                            const nm = `${first} ${last}`.trim();
-                                                                            const id = c.ID ? `#${c.ID}` : '';
-                                                                            const tmpl = `Bună ziua${nm ? ' ' + nm : ''},\nVă retrimitem grafica pentru comanda ${id}.\nVă rugăm să verificați și să ne confirmați.\nMulțumim!`;
-                                                                            setResendOrder(c);
-                                                                            setResendViaEmail(true);
-                                                                            setResendViaSMS(false);
-                                                                            setResendViaWhatsApp(false);
-                                                                            setResendMessage(tmpl);
-                                                                            setShowResendGraphicModal(true);
-                                                                          }}
+                                      onClick={() => handleRetrimitereGraficaClick(c.ID)}
                                       title="Retrimitere grafica"
                                       aria-label="Retrimitere grafica"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Retrimitere grafica</span>
-                                      <Send className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se retrimite...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Retrimitere grafica</span>
+                                          <Send className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => alert('Productie – în curând')}
+                                      onClick={() => handleMutaProductieClick(c.ID)}
                                       title="Productie"
                                       aria-label="Productie"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Productie</span>
-                                      <Layers className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Productie</span>
+                                          <Layers className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => { setAddWpNoteText('Grafica greșită'); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(c.ID); setShowAddWpNoteModal(true); }}
+                                      onClick={() => handleMutaGraficaGresitaClick(c.ID)}
                                       title="Grafica gresita"
                                       aria-label="Grafica gresita"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Grafica gresita</span>
-                                      <AlertTriangle className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se mută...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Grafica gresita</span>
+                                          <AlertTriangle className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="destructive"
                                       size="sm"
-                                      onClick={() => alert('Anulare – în curând')}
+                                      onClick={() => handleMutaAnulareClick(c.ID)}
                                       title="Anulează"
                                       aria-label="Anulează"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <X className="w-4 h-4" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                          <span>Se anulează...</span>
+                                        </div>
+                                      ) : (
+                                        <X className="w-4 h-4" />
+                                      )}
                                     </Button>
                                   </>
                                 ) : zonaActiva === 'lipsapoze' ? (
@@ -1794,31 +2227,59 @@ export const Content = ({
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => alert('Precomanda – în curând')}
+                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
                                       title="Precomanda"
                                       aria-label="Precomanda"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Precomanda</span>
-                                      <CalendarClock className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Precomanda</span>
+                                          <CalendarClock className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => alert('Procesare – în curând')}
+                                      onClick={() => handleMutaProcesareClick(c.ID)}
                                       title="Procesare"
                                       aria-label="Procesare"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <span>Procesare</span>
-                                      <Cog className="w-4 h-4 ml-1" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se procesează...</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <span>Procesare</span>
+                                          <Cog className="w-4 h-4 ml-1" />
+                                        </>
+                                      )}
                                     </Button>
                                     <Button
                                       variant="destructive"
                                       size="sm"
-                                      onClick={() => alert('Anulare – în curând')}
+                                      onClick={() => handleMutaAnulareClick(c.ID)}
                                       title="Anulează"
                                       aria-label="Anulează"
+                                      disabled={movingCommandId === c.ID}
                                     >
-                                      <X className="w-4 h-4" />
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                          <span>Se anulează...</span>
+                                        </div>
+                                      ) : (
+                                        <X className="w-4 h-4" />
+                                      )}
                                     </Button>
                                   </>
                                 ) : (
@@ -1831,9 +2292,18 @@ export const Content = ({
                                         aria-label="Trimite tichet DPD"
                                         onClick={() => {
                                           setAwbOrder(c);
-                                          setAwbInfo({ awb: (c.awb_curier || '').toString().trim(), courier: courierText });
+                                          const awb = (c.awb_curier || '').toString().trim();
+                                          setAwbInfo({ awb, courier: courierText });
+
+                                          const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
+                                          const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
+                                          const nm = `${first} ${last}`.trim() || '-';
+                                          const id = c.ID ? `#${c.ID}` : '';
+                                          const subject = `${awb} - Problema comanda ${nm} ${id}`;
+
                                           setAwbTicketMessage("");
                                           setAwbTicketGenerating(false);
+                                          setAwbTicketSubject(subject);
                                           setShowAwbTicketModal(true);
                                         }}
                                       >
@@ -1852,13 +2322,29 @@ export const Content = ({
                                     <Button variant="outline" size="sm" title="Precomandă" aria-label="Precomandă">
                                       <CalendarClock className="w-4 h-4" />
                                     </Button>
-                                    <Button variant="outline" size="sm">Lipsa poze</Button>
+                                    <Button
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => handleMutaLipsaPozeClick(c.ID)}
+                                      disabled={movingCommandId === c.ID}
+                                    >
+                                      {movingCommandId === c.ID ? (
+                                        <div className="flex items-center">
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                                          <span>Se mută...</span>
+                                        </div>
+                                      ) : (
+                                        "Lipsa poze"
+                                      )}
+                                    </Button>
                                     <Button variant="destructive" size="sm" title="Anulează" aria-label="Anulează">
                                       <X className="w-4 h-4" />
                                     </Button>
-                                    <Button variant="default" size="sm" title="Confirmă" aria-label="Confirmă">
-                                      <Check className="w-4 h-4" />
-                                    </Button>
+                                    {zonaActiva !== 'confirmare' && (
+                                      <Button variant="default" size="sm" title="Confirmă" aria-label="Confirmă">
+                                        <Check className="w-4 h-4" />
+                                      </Button>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -2117,25 +2603,32 @@ export const Content = ({
                       </Button>
                     </div>
                     <div className="p-3 space-y-3 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-muted-foreground">Către</div>
-                        <div className="font-medium select-all">backline@dpd.ro</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-muted-foreground w-16">Către</div>
+                        <input 
+                          type="text" 
+                          className="flex-1 p-1 border rounded text-sm" 
+                          value={awbTicketTo} 
+                          onChange={(e) => setAwbTicketTo(e.target.value)}
+                          disabled={sendTicketSubmitting}
+                        />
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-muted-foreground">CC</div>
-                        <div className="font-medium select-all">valentina.botan@dpd.ro</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-muted-foreground w-16">CC</div>
+                        <input 
+                          type="text" 
+                          className="flex-1 p-1 border rounded text-sm" 
+                          value={awbTicketCc} 
+                          onChange={(e) => setAwbTicketCc(e.target.value)}
+                          disabled={sendTicketSubmitting}
+                        />
                       </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-muted-foreground">Subiect</div>
-                        <div className="font-medium truncate max-w-[70%]" title={(() => {
-                          const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                          const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                          const nm = `${first} ${last}`.trim() || '-';
-                          const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
-                          const awb = awbInfo?.awb || 'AWB';
-                          return `${awb} - Problema comanda ${nm} ${id}`;
-                        })()}>
-                          {(() => {
+                      <div className="flex items-center gap-2">
+                        <div className="text-muted-foreground w-16">Subiect</div>
+                        <input 
+                          type="text" 
+                          className="flex-1 p-1 border rounded text-sm" 
+                          value={awbTicketSubject || (() => {
                             const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
                             const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
                             const nm = `${first} ${last}`.trim() || '-';
@@ -2143,7 +2636,9 @@ export const Content = ({
                             const awb = awbInfo?.awb || 'AWB';
                             return `${awb} - Problema comanda ${nm} ${id}`;
                           })()}
-                        </div>
+                          onChange={(e) => setAwbTicketSubject(e.target.value)}
+                          disabled={sendTicketSubmitting}
+                        />
                       </div>
 
                       {/* Mesaj */}
@@ -2198,38 +2693,78 @@ export const Content = ({
                           onInput={(e) => setAwbTicketMessage((e.target as HTMLDivElement).innerHTML)}
                           dangerouslySetInnerHTML={{ __html: awbTicketMessage || '' }}
                         />
-                        <div className="mt-2 flex items-center justify-between">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={sendTicketSubmitting || awbTicketGenerating}
-                            onClick={() => {
-                              try {
-                                setAwbTicketGenerating(true);
-                                const awb = awbInfo?.awb || '-';
-                                const courier = awbInfo?.courier || 'DPD';
-                                const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                                const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                                const nume = `${first} ${last}`.trim() || '-';
-                                const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
-                                const cur = (awbData as any)?.current_status || '-';
-                                const html = [
-                                  `<p>Bună ziua,</p>`,
-                                  `<p>Vă rog sprijin pentru AWB <strong>${awb}</strong> (${courier}).</p>`,
-                                  `<p>Comandă: <strong>${id}</strong> • Client: <strong>${nume}</strong>.</p>`,
-                                  `<p>Status curent: <em>${cur}</em>.</p>`,
-                                  `<p>Descriere problemă: <span style="color:#666">[vă rugăm completați aici detaliile]</span>.</p>`,
-                                  `<p>Mulțumesc!</p>`
-                                ].join('');
-                                setAwbTicketMessage(html);
-                              } finally {
-                                setAwbTicketGenerating(false);
-                              }
-                            }}
-                          >
-                            {awbTicketGenerating ? 'Se generează…' : 'Generează cu AI'}
-                          </Button>
+                        <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={sendTicketSubmitting || awbTicketGenerating}
+                              onClick={() => {
+                                try {
+                                  setAwbTicketGenerating(true);
+                                  const awb = awbInfo?.awb || '-';
+                                  const courier = awbInfo?.courier || 'DPD';
+                                  const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                                  const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                                  const nume = `${first} ${last}`.trim() || '-';
+                                  const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
+                                  const cur = (awbData as any)?.current_status || '-';
+                                  const html = [
+                                    `<p>Bună ziua,</p>`,
+                                    `<p>Vă rog sprijin pentru AWB <strong>${awb}</strong> (${courier}).</p>`,
+                                    `<p>Comandă: <strong>${id}</strong> • Client: <strong>${nume}</strong>.</p>`,
+                                    `<p>Status curent: <em>${cur}</em>.</p>`,
+                                    `<p>Descriere problemă: <span style="color:#666">[vă rugăm completați aici detaliile]</span>.</p>`,
+                                    `<p>Mulțumesc!</p>`
+                                  ].join('');
+                                  setAwbTicketMessage(html);
+                                } finally {
+                                  setAwbTicketGenerating(false);
+                                }
+                              }}
+                            >
+                              {awbTicketGenerating ? 'Se generează…' : 'Generează cu AI'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={sendTicketSubmitting || awbTicketGenerating || !awbTicketMessage}
+                              onClick={() => {
+                                try {
+                                  setAwbTicketGenerating(true);
+                                  // Simulate AI correction - in a real implementation, this would call an API
+                                  setTimeout(() => {
+                                    setAwbTicketGenerating(false);
+                                  }, 500);
+                                } catch {
+                                  setAwbTicketGenerating(false);
+                                }
+                              }}
+                            >
+                              Corectează cu AI
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={sendTicketSubmitting || awbTicketGenerating || !awbTicketMessage}
+                              onClick={() => {
+                                try {
+                                  setAwbTicketGenerating(true);
+                                  // Simulate AI completion - in a real implementation, this would call an API
+                                  setTimeout(() => {
+                                    setAwbTicketGenerating(false);
+                                  }, 500);
+                                } catch {
+                                  setAwbTicketGenerating(false);
+                                }
+                              }}
+                            >
+                              Completează cu AI
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2316,7 +2851,19 @@ export const Content = ({
                               size="sm"
                               className="h-7 px-2"
                               title="Trimite tichet DPD"
-                              onClick={() => { setAwbTicketMessage(""); setAwbTicketGenerating(false); setShowAwbTicketModal(true); }}
+                              onClick={() => { 
+                                const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
+                                const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
+                                const nm = `${first} ${last}`.trim() || '-';
+                                const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
+                                const awb = awbInfo?.awb || 'AWB';
+                                const subject = `${awb} - Problema comanda ${nm} ${id}`;
+
+                                setAwbTicketMessage(""); 
+                                setAwbTicketGenerating(false);
+                                setAwbTicketSubject(subject);
+                                setShowAwbTicketModal(true); 
+                              }}
                             >
                               <Send className="w-4 h-4 mr-1" />
                               Trimite tichet
@@ -2451,6 +2998,66 @@ export const Content = ({
                                     );
                                   })}
                                 </div>
+
+                                {/* Warning if pickup date is different from proposed shipping date */}
+                                {(() => {
+                                  // Get the proposed shipping date
+                                  const proposedShippingDate = awbOrder?.expediere;
+                                  if (!proposedShippingDate) return null;
+
+                                  // Get the actual pickup date (first tracking entry)
+                                  const pickupStep = steps.find(s => s.key === 'picked_up');
+                                  const pickupDate = pickupStep?.sub;
+                                  if (!pickupDate) return null;
+
+                                  // Parse dates for comparison (only compare the date part, not time)
+                                  const parseDate = (dateStr: string) => {
+                                    try {
+                                      // Try to extract just the date part in a consistent format
+                                      let date: Date;
+
+                                      // Pattern 1: DD.MM.YYYY
+                                      const m1 = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+                                      if (m1) {
+                                        date = new Date(`${m1[3]}-${m1[2]}-${m1[1]}`);
+                                      } 
+                                      // Pattern 2: YYYY-MM-DD
+                                      else if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                        date = new Date(dateStr.substring(0, 10));
+                                      }
+                                      // Other formats - try direct parsing
+                                      else {
+                                        date = new Date(dateStr);
+                                      }
+
+                                      if (isNaN(date.getTime())) return null;
+
+                                      // Return date string in YYYY-MM-DD format for comparison
+                                      return date.toISOString().split('T')[0];
+                                    } catch {
+                                      return null;
+                                    }
+                                  };
+
+                                  const proposedDateStr = parseDate(proposedShippingDate);
+                                  const pickupDateStr = parseDate(String(pickupDate));
+
+                                  if (!proposedDateStr || !pickupDateStr) return null;
+
+                                  // If dates are different, show warning
+                                  if (proposedDateStr !== pickupDateStr) {
+                                    return (
+                                      <div className="mt-3 p-2 border border-amber-500 bg-amber-50 rounded-md flex items-center gap-2 text-sm text-amber-800">
+                                        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                                        <div>
+                                          <strong>Atenție:</strong> Comanda a fost preluată de curier în data de <strong>{pickupDate}</strong>, diferit de data propusă clientului (<strong>{proposedShippingDate}</strong>).
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  return null;
+                                })()}
                               </>
                             );
                           })()}
@@ -2465,7 +3072,7 @@ export const Content = ({
                               {awbData.courier && (<span><span className="text-muted-foreground">Curier:</span> <span className="font-medium">{awbData.courier}</span></span>)}
                             </div>
                           </div>
-                          <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                          <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50">
                             {Array.isArray(awbData.tracking_data) && awbData.tracking_data.length > 0 ? (
                               <div className="space-y-2">
                                 {(() => {
@@ -2505,7 +3112,7 @@ export const Content = ({
                               <Plus className="w-4 h-4" />
                             </Button>
                           </div>
-                          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-gray-50">
                             {Array.isArray(awbOrder?.notes) && awbOrder!.notes.length > 0 ? (
                               awbOrder!.notes.map((n, idx) => (
                                 <div key={idx} className="p-2 rounded-md border border-border">
@@ -2979,7 +3586,7 @@ export const Content = ({
               className="flex items-center gap-1"
             >
               <BadgeCheck className="w-4 h-4" />
-              <span>Confirmare</span>
+              <span>Confirmate</span>
               <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-muted px-1 text-xs text-black">
                 {statsData.find(s => s.title === 'Confirmare')?.value ?? 0}
               </span>
@@ -3064,16 +3671,16 @@ export const Content = ({
         </div>
       )}
       {/* Floating toggle button (hidden when chat is open) */}
-      {!showChat && (
-        <Button
-          className="fixed bottom-4 right-4 z-50 rounded-full h-12 w-12 p-0 shadow-lg bg-primary text-primary-foreground hover:opacity-90"
-          onClick={() => setShowChat(true)}
-          aria-label="Deschide chat Grafica"
-          title="Chat Grafica"
-        >
-          <MessageSquare className="w-6 h-6" />
-        </Button>
-      )}
+      {/*{!showChat && (*/}
+      {/*  <Button*/}
+      {/*    className="fixed bottom-4 right-4 z-50 rounded-full h-12 w-12 p-0 shadow-lg bg-primary text-primary-foreground hover:opacity-90"*/}
+      {/*    onClick={() => setShowChat(true)}*/}
+      {/*    aria-label="Deschide chat Grafica"*/}
+      {/*    title="Chat Grafica"*/}
+      {/*  >*/}
+      {/*    <MessageSquare className="w-6 h-6" />*/}
+      {/*  </Button>*/}
+      {/*)}*/}
 
       {/* Problem reporting modal */}
       <Dialog open={showProblemModal} onOpenChange={setShowProblemModal}>
@@ -3626,6 +4233,968 @@ export const Content = ({
               Închide
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Confirmation modal */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="fixed inset-0 w-full h-full max-w-none p-0 m-0 rounded-none translate-x-0 translate-y-0 overflow-hidden flex flex-col">
+          {/* Sticky top bar */}
+          <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Order ID and client name */}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-sm">#{confirmOrder?.ID}</Badge>
+                <span className="font-medium">
+                  {confirmOrder?.shipping_details._shipping_first_name}{" "}
+                  {confirmOrder?.shipping_details._shipping_last_name}
+                </span>
+              </div>
+
+              {/* Total amount */}
+              <Badge variant="secondary" className="text-sm font-semibold">
+                {confirmOrder?.order_total_formatted || confirmOrder?.pret_total || "-"}
+              </Badge>
+
+              {/* Order type icon */}
+              <div className="flex items-center gap-1">
+                <Gift className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              {/* Creation date & time */}
+              <div className="flex items-center gap-1">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">
+                  {confirmOrder?.post_date ? formatDate(confirmOrder.post_date) : "-"}
+                </span>
+              </div>
+
+              {/* Phone (click-to-call) */}
+              {confirmOrder?.billing_details?._billing_phone && (
+                <a 
+                  href={`tel:${confirmOrder.billing_details._billing_phone}`}
+                  className="flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  <PhoneCall className="h-4 w-4" />
+                  {confirmOrder.billing_details._billing_phone}
+                </a>
+              )}
+
+              {/* Order status */}
+              <Badge variant="outline" className="capitalize">
+                {confirmOrder?.post_status === 'wc-processing' ? 'În lucru' : 
+                 confirmOrder?.post_status === 'wc-completed' ? 'Finalizată' : 
+                 confirmOrder?.post_status === 'wc-pending' ? 'Nouă' : 
+                 confirmOrder?.post_status || 'Necunoscut'}
+              </Badge>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button size="sm">
+                Procesează
+              </Button>
+              <Button size="sm" variant="outline">
+                <ImageOff className="h-4 w-4 mr-1" />
+                Lipsă poze
+              </Button>
+              <Button size="sm" variant="outline">
+                <Cog className="h-4 w-4 mr-1" />
+                Actualizează
+              </Button>
+              <Button size="sm" variant="destructive">
+                <X className="h-4 w-4 mr-1" />
+                Anulează
+              </Button>
+              <DialogClose className="rounded-full p-1 hover:bg-muted">
+                <X className="h-5 w-5" />
+              </DialogClose>
+            </div>
+          </div>
+
+          {/* Main content area with 3 columns */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 max-w-[1800px] mx-auto">
+              {/* Left column (28%) - Client data & logistics */}
+              <div className="lg:col-span-3 space-y-4">
+                {/* Card 1: Delivery and Billing Tabs */}
+                <Card>
+                  <div className="p-4">
+                    <div className="flex border-b border-border mb-4">
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeAddressTab === 'shipping'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveAddressTab('shipping')}
+                      >
+                        Livrare
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeAddressTab === 'billing'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveAddressTab('billing')}
+                      >
+                        Facturare
+                      </button>
+                    </div>
+
+                    {/* Shipping Address Tab */}
+                    {activeAddressTab === 'shipping' && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="shipping_firstName">Nume</Label>
+                            <input 
+                              id="shipping_firstName" 
+                              className="w-full p-2 border border-border rounded-md" 
+                              defaultValue={confirmOrder?.shipping_details._shipping_first_name || ""}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="shipping_lastName">Prenume</Label>
+                            <input 
+                              id="shipping_lastName" 
+                              className="w-full p-2 border border-border rounded-md" 
+                              defaultValue={confirmOrder?.shipping_details._shipping_last_name || ""}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="shipping_phone">Telefon</Label>
+                          <input 
+                            id="shipping_phone" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.billing_details?._billing_phone || ""}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="shipping_county">Județ</Label>
+                            <Select defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}>
+                              <SelectTrigger id="shipping_county">
+                                <SelectValue placeholder="Selectează județul" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Alba">Alba</SelectItem>
+                                <SelectItem value="Arad">Arad</SelectItem>
+                                <SelectItem value="Arges">Argeș</SelectItem>
+                                <SelectItem value="Bacau">Bacău</SelectItem>
+                                <SelectItem value="Bihor">Bihor</SelectItem>
+                                <SelectItem value="Bistrita-Nasaud">Bistrița-Năsăud</SelectItem>
+                                <SelectItem value="Botosani">Botoșani</SelectItem>
+                                <SelectItem value="Braila">Brăila</SelectItem>
+                                <SelectItem value="Brasov">Brașov</SelectItem>
+                                <SelectItem value="Bucuresti">București</SelectItem>
+                                <SelectItem value="Buzau">Buzău</SelectItem>
+                                <SelectItem value="Calarasi">Călărași</SelectItem>
+                                <SelectItem value="Caras-Severin">Caraș-Severin</SelectItem>
+                                <SelectItem value="Cluj">Cluj</SelectItem>
+                                <SelectItem value="Constanta">Constanța</SelectItem>
+                                <SelectItem value="Covasna">Covasna</SelectItem>
+                                <SelectItem value="Dambovita">Dâmbovița</SelectItem>
+                                <SelectItem value="Dolj">Dolj</SelectItem>
+                                <SelectItem value="Galati">Galați</SelectItem>
+                                <SelectItem value="Giurgiu">Giurgiu</SelectItem>
+                                <SelectItem value="Gorj">Gorj</SelectItem>
+                                <SelectItem value="Harghita">Harghita</SelectItem>
+                                <SelectItem value="Hunedoara">Hunedoara</SelectItem>
+                                <SelectItem value="Ialomita">Ialomița</SelectItem>
+                                <SelectItem value="Iasi">Iași</SelectItem>
+                                <SelectItem value="Ilfov">Ilfov</SelectItem>
+                                <SelectItem value="Maramures">Maramureș</SelectItem>
+                                <SelectItem value="Mehedinti">Mehedinți</SelectItem>
+                                <SelectItem value="Mures">Mureș</SelectItem>
+                                <SelectItem value="Neamt">Neamț</SelectItem>
+                                <SelectItem value="Olt">Olt</SelectItem>
+                                <SelectItem value="Prahova">Prahova</SelectItem>
+                                <SelectItem value="Salaj">Sălaj</SelectItem>
+                                <SelectItem value="Satu Mare">Satu Mare</SelectItem>
+                                <SelectItem value="Sibiu">Sibiu</SelectItem>
+                                <SelectItem value="Suceava">Suceava</SelectItem>
+                                <SelectItem value="Teleorman">Teleorman</SelectItem>
+                                <SelectItem value="Timis">Timiș</SelectItem>
+                                <SelectItem value="Tulcea">Tulcea</SelectItem>
+                                <SelectItem value="Valcea">Vâlcea</SelectItem>
+                                <SelectItem value="Vaslui">Vaslui</SelectItem>
+                                <SelectItem value="Vrancea">Vrancea</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="shipping_city">Localitate</Label>
+                            <Select defaultValue={confirmOrder?.shipping_details?._shipping_city || "not_selected"}>
+                              <SelectTrigger id="shipping_city">
+                                <SelectValue placeholder="Selectează localitatea" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={confirmOrder?.shipping_details?._shipping_city || "not_selected"}>
+                                  {confirmOrder?.shipping_details?._shipping_city || "Selectează localitatea"}
+                                </SelectItem>
+                                {/* Aici ar trebui să fie o listă de localități bazată pe județul selectat */}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="shipping_address">Stradă/Număr</Label>
+                          <Select defaultValue={confirmOrder?.shipping_details?._shipping_address_1 || "not_selected"}>
+                            <SelectTrigger id="shipping_address">
+                              <SelectValue placeholder="Selectează strada" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={confirmOrder?.shipping_details?._shipping_address_1 || "not_selected"}>
+                                {confirmOrder?.shipping_details?._shipping_address_1 || "Selectează strada"}
+                              </SelectItem>
+                              {/* Aici ar trebui să fie o listă de străzi bazată pe localitatea selectată */}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="shipping_postalCode">Cod poștal</Label>
+                          <input 
+                            id="shipping_postalCode" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.shipping_details?._shipping_postcode || ""}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="shipping_addressDetails">Detalii adresă</Label>
+                          <input 
+                            id="shipping_addressDetails" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.shipping_details?._shipping_address_2 || ""}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Billing Address Tab */}
+                    {activeAddressTab === 'billing' && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="billing_firstName">Nume</Label>
+                            <input 
+                              id="billing_firstName" 
+                              className="w-full p-2 border border-border rounded-md" 
+                              defaultValue={confirmOrder?.billing_details?._billing_first_name || ""}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="billing_lastName">Prenume</Label>
+                            <input 
+                              id="billing_lastName" 
+                              className="w-full p-2 border border-border rounded-md" 
+                              defaultValue={confirmOrder?.billing_details?._billing_last_name || ""}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="billing_phone">Telefon</Label>
+                          <input 
+                            id="billing_phone" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.billing_details?._billing_phone || ""}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="billing_county">Județ</Label>
+                            <Select defaultValue={confirmOrder?.billing_details?._billing_state || ""}>
+                              <SelectTrigger id="billing_county">
+                                <SelectValue placeholder="Selectează județul" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Alba">Alba</SelectItem>
+                                <SelectItem value="Arad">Arad</SelectItem>
+                                <SelectItem value="Arges">Argeș</SelectItem>
+                                <SelectItem value="Bacau">Bacău</SelectItem>
+                                <SelectItem value="Bihor">Bihor</SelectItem>
+                                <SelectItem value="Bistrita-Nasaud">Bistrița-Năsăud</SelectItem>
+                                <SelectItem value="Botosani">Botoșani</SelectItem>
+                                <SelectItem value="Braila">Brăila</SelectItem>
+                                <SelectItem value="Brasov">Brașov</SelectItem>
+                                <SelectItem value="Bucuresti">București</SelectItem>
+                                <SelectItem value="Buzau">Buzău</SelectItem>
+                                <SelectItem value="Calarasi">Călărași</SelectItem>
+                                <SelectItem value="Caras-Severin">Caraș-Severin</SelectItem>
+                                <SelectItem value="Cluj">Cluj</SelectItem>
+                                <SelectItem value="Constanta">Constanța</SelectItem>
+                                <SelectItem value="Covasna">Covasna</SelectItem>
+                                <SelectItem value="Dambovita">Dâmbovița</SelectItem>
+                                <SelectItem value="Dolj">Dolj</SelectItem>
+                                <SelectItem value="Galati">Galați</SelectItem>
+                                <SelectItem value="Giurgiu">Giurgiu</SelectItem>
+                                <SelectItem value="Gorj">Gorj</SelectItem>
+                                <SelectItem value="Harghita">Harghita</SelectItem>
+                                <SelectItem value="Hunedoara">Hunedoara</SelectItem>
+                                <SelectItem value="Ialomita">Ialomița</SelectItem>
+                                <SelectItem value="Iasi">Iași</SelectItem>
+                                <SelectItem value="Ilfov">Ilfov</SelectItem>
+                                <SelectItem value="Maramures">Maramureș</SelectItem>
+                                <SelectItem value="Mehedinti">Mehedinți</SelectItem>
+                                <SelectItem value="Mures">Mureș</SelectItem>
+                                <SelectItem value="Neamt">Neamț</SelectItem>
+                                <SelectItem value="Olt">Olt</SelectItem>
+                                <SelectItem value="Prahova">Prahova</SelectItem>
+                                <SelectItem value="Salaj">Sălaj</SelectItem>
+                                <SelectItem value="Satu Mare">Satu Mare</SelectItem>
+                                <SelectItem value="Sibiu">Sibiu</SelectItem>
+                                <SelectItem value="Suceava">Suceava</SelectItem>
+                                <SelectItem value="Teleorman">Teleorman</SelectItem>
+                                <SelectItem value="Timis">Timiș</SelectItem>
+                                <SelectItem value="Tulcea">Tulcea</SelectItem>
+                                <SelectItem value="Valcea">Vâlcea</SelectItem>
+                                <SelectItem value="Vaslui">Vaslui</SelectItem>
+                                <SelectItem value="Vrancea">Vrancea</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="billing_city">Localitate</Label>
+                            <Select defaultValue={confirmOrder?.billing_details?._billing_city || "not_selected"}>
+                              <SelectTrigger id="billing_city">
+                                <SelectValue placeholder="Selectează localitatea" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={confirmOrder?.billing_details?._billing_city || "not_selected"}>
+                                  {confirmOrder?.billing_details?._billing_city || "Selectează localitatea"}
+                                </SelectItem>
+                                {/* Aici ar trebui să fie o listă de localități bazată pe județul selectat */}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="billing_address">Stradă/Număr</Label>
+                          <Select defaultValue={confirmOrder?.billing_details?._billing_address_1 || "not_selected"}>
+                            <SelectTrigger id="billing_address">
+                              <SelectValue placeholder="Selectează strada" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={confirmOrder?.billing_details?._billing_address_1 || "not_selected"}>
+                                {confirmOrder?.billing_details?._billing_address_1 || "Selectează strada"}
+                              </SelectItem>
+                              {/* Aici ar trebui să fie o listă de străzi bazată pe localitatea selectată */}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="billing_postalCode">Cod poștal</Label>
+                          <input 
+                            id="billing_postalCode" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.billing_details?._billing_postcode || ""}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="billing_addressDetails">Detalii adresă</Label>
+                          <input 
+                            id="billing_addressDetails" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            defaultValue={confirmOrder?.billing_details?._billing_address_2 || ""}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Card 2: Courier options */}
+                <Card>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-lg mb-4">Opțiuni curier</h3>
+
+                    <div className="space-y-4">
+                      {/* FAN Courier */}
+                      <div className="border border-border rounded-md p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">FAN Courier</h4>
+                          <img src="https://www.fancourier.ro/wp-content/themes/fancourier/images/logo.png" alt="FAN Courier" className="h-5" />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label htmlFor="fanCity">Localitate</Label>
+                              <input 
+                                id="fanCity" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_city || ""}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="fanCounty">Județ</Label>
+                              <input 
+                                id="fanCounty" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label htmlFor="fanCommune">Comună (opțional)</Label>
+                            <input 
+                              id="fanCommune" 
+                              className="w-full p-2 border border-border rounded-md" 
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="mb-1 block">Zile livrare</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="fanMonday" className="rounded" />
+                                <Label htmlFor="fanMonday">Lu</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="fanTuesday" className="rounded" />
+                                <Label htmlFor="fanTuesday">Ma</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="fanWednesday" className="rounded" />
+                                <Label htmlFor="fanWednesday">Mi</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="fanThursday" className="rounded" />
+                                <Label htmlFor="fanThursday">Jo</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="fanFriday" className="rounded" />
+                                <Label htmlFor="fanFriday">Vi</Label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* DPD */}
+                      <div className="border border-border rounded-md p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">DPD</h4>
+                          <img src="https://www.dpd.com/ro/wp-content/uploads/sites/169/2019/04/DPD_logo_redgrad_rgb.png" alt="DPD" className="h-5" />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label htmlFor="dpdCity">Localitate</Label>
+                              <input 
+                                id="dpdCity" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_city || ""}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="dpdCounty">Județ</Label>
+                              <input 
+                                id="dpdCounty" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label htmlFor="dpdCommune">Comună (opțional)</Label>
+                            <input 
+                              id="dpdCommune" 
+                              className="w-full p-2 border border-border rounded-md" 
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="mb-1 block">Zile livrare</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="dpdMonday" className="rounded" />
+                                <Label htmlFor="dpdMonday">Lu</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="dpdTuesday" className="rounded" />
+                                <Label htmlFor="dpdTuesday">Ma</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="dpdWednesday" className="rounded" />
+                                <Label htmlFor="dpdWednesday">Mi</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="dpdThursday" className="rounded" />
+                                <Label htmlFor="dpdThursday">Jo</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="dpdFriday" className="rounded" />
+                                <Label htmlFor="dpdFriday">Vi</Label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Curier */}
+                      <div className="border border-border rounded-md p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium">Curier</h4>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label htmlFor="courierCity">Localitate</Label>
+                              <input 
+                                id="courierCity" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_city || ""}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="courierCounty">Județ</Label>
+                              <input 
+                                id="courierCounty" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label htmlFor="courierCommune">Comună (opțional)</Label>
+                            <input 
+                              id="courierCommune" 
+                              className="w-full p-2 border border-border rounded-md" 
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="mb-1 block">Zile livrare</Label>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="courierMonday" className="rounded" />
+                                <Label htmlFor="courierMonday">Lu</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="courierTuesday" className="rounded" />
+                                <Label htmlFor="courierTuesday">Ma</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="courierWednesday" className="rounded" />
+                                <Label htmlFor="courierWednesday">Mi</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="courierThursday" className="rounded" />
+                                <Label htmlFor="courierThursday">Jo</Label>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <input type="checkbox" id="courierFriday" className="rounded" />
+                                <Label htmlFor="courierFriday">Vi</Label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button disabled className="w-full">
+                        Generează AWB
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Card 3: Order type, payment method, total */}
+                <Card>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-lg mb-4">Tip, Metodă, Total, Cupon</h3>
+
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="orderType">Tip comandă</Label>
+                        <Select defaultValue="standard">
+                          <SelectTrigger id="orderType">
+                            <SelectValue placeholder="Selectează tipul comenzii" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="standard">Standard</SelectItem>
+                            <SelectItem value="urgent">Urgent</SelectItem>
+                            <SelectItem value="gift">Cadou</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="paymentMethod">Metodă de plată</Label>
+                        <Select defaultValue={confirmOrder?.payment_method || "card"}>
+                          <SelectTrigger id="paymentMethod">
+                            <SelectValue placeholder="Selectează metoda de plată" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="card">Card</SelectItem>
+                            <SelectItem value="ramburs">Ramburs</SelectItem>
+                            <SelectItem value="transfer">Transfer bancar</SelectItem>
+                            <SelectItem value="netopia">NETOPIA</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="totalAmount">Total</Label>
+                        <input 
+                          id="totalAmount" 
+                          className="w-full p-2 border border-border rounded-md bg-muted" 
+                          defaultValue={confirmOrder?.order_total_formatted || confirmOrder?.pret_total || ""}
+                          readOnly
+                        />
+                      </div>
+
+                      <div className="flex space-x-2">
+                        <div className="flex-1">
+                          <Label htmlFor="coupon">Cupon</Label>
+                          <input 
+                            id="coupon" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            placeholder="Cod cupon"
+                          />
+                        </div>
+                        <div className="pt-6">
+                          <Button variant="outline" size="sm">
+                            Adaugă cupon
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Center column (44%) - Confirmation & production options */}
+              <div className="lg:col-span-5 space-y-4">
+                <Card>
+                  <div className="p-4">
+                    <div className="flex border-b border-border mb-4">
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeConfirmTab === 'confirmare'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveConfirmTab('confirmare')}
+                      >
+                        Confirmare
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeConfirmTab === 'sms'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveConfirmTab('sms')}
+                      >
+                        SMS
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeConfirmTab === 'notite'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveConfirmTab('notite')}
+                      >
+                        Notite
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeConfirmTab === 'puncte'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveConfirmTab('puncte')}
+                      >
+                        Puncte
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeConfirmTab === 'persoane'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveConfirmTab('persoane')}
+                      >
+                        Persoane apropiate
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Status icons row */}
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <Badge variant="outline" className="cursor-pointer hover:bg-secondary px-3 py-1">
+                          ✅ OK
+                        </Badge>
+                        <Badge variant="outline" className="cursor-pointer hover:bg-secondary px-3 py-1">
+                          📞 Follow-up
+                        </Badge>
+                        <Badge variant="outline" className="cursor-pointer hover:bg-secondary px-3 py-1">
+                          ❓ Nelămurit
+                        </Badge>
+                        <Badge variant="outline" className="cursor-pointer hover:bg-secondary px-3 py-1">
+                          ❌ Respins
+                        </Badge>
+                      </div>
+
+                      {/* Toggle switches */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="noSmsGraphics">Fără SMS grafică</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="noSmsGraphics" className="toggle" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="noSmsAwb">Fără SMS AWB</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="noSmsAwb" className="toggle" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="noInvoice">Fără factură</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="noInvoice" className="toggle" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="manualAwb">AWB manual</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="manualAwb" className="toggle" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="differentLichens">Licheni diferiți</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="differentLichens" className="toggle" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border border-border rounded-md p-2">
+                          <Label htmlFor="differentAnnexes">Anexe diferite</Label>
+                          <div className="flex items-center h-4">
+                            <input type="checkbox" id="differentAnnexes" className="toggle" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Confirmation selects */}
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="confirmationStatus">Confirmare</Label>
+                          <Select defaultValue="confirmed">
+                            <SelectTrigger id="confirmationStatus">
+                              <SelectValue placeholder="Selectează statusul confirmării" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="confirmed">Confirmat</SelectItem>
+                              <SelectItem value="toCall">De sunat</SelectItem>
+                              <SelectItem value="noAnswer">Fără răspuns</SelectItem>
+                              <SelectItem value="refused">Refuz</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="difficulty">Dificultate</Label>
+                          <Select defaultValue="medium">
+                            <SelectTrigger id="difficulty">
+                              <SelectValue placeholder="Selectează nivelul de dificultate" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="easy">Ușor</SelectItem>
+                              <SelectItem value="medium">Mediu</SelectItem>
+                              <SelectItem value="hard">Greu</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="shippingDate">Data expedierii</Label>
+                          <input 
+                            id="shippingDate" 
+                            type="date" 
+                            className="w-full p-2 border border-border rounded-md" 
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="baseColor">Culoare bază</Label>
+                          <Select defaultValue="white">
+                            <SelectTrigger id="baseColor">
+                              <SelectValue placeholder="Selectează culoarea de bază" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="white">Alb</SelectItem>
+                              <SelectItem value="black">Negru</SelectItem>
+                              <SelectItem value="wood">Lemn</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="reason">Motiv</Label>
+                          <Select>
+                            <SelectTrigger id="reason">
+                              <SelectValue placeholder="Selectează motivul neconfirmării" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="noAnswer">Clientul nu răspunde</SelectItem>
+                              <SelectItem value="wrongNumber">Număr greșit</SelectItem>
+                              <SelectItem value="other">Alt motiv</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <Button variant="outline" size="sm">
+                          Adaugă motiv neconfirmare
+                        </Button>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="date">Data</Label>
+                          <input 
+                            id="date" 
+                            className="w-full p-2 border border-border rounded-md" 
+                            placeholder="Notă rapidă pentru dată"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Right column (28%) - Product personalization & dynamic fields */}
+              <div className="lg:col-span-4 space-y-4">
+                <Card>
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-lg">Detalii produs & personalizare</h3>
+                      <Badge variant="outline">
+                        {confirmOrder?.order_total_formatted || confirmOrder?.pret_total || "-"} / 
+                        {confirmOrder?.payment_method === 'cod' ? ' neplătit' : ' plătit'}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-4">
+                      {confirmOrder?.produse_finale.map((produs, idx) => (
+                        <div key={idx} className="border border-border rounded-md p-3">
+                          <div className="flex items-start gap-3 mb-3">
+                            {produs.poza && (
+                              <img
+                                src={`https://darurialese.ro/wp-content/uploads/${produs.poza}`}
+                                alt={produs.nume}
+                                className="w-16 h-16 object-contain rounded"
+                              />
+                            )}
+                            <div>
+                              <div className="font-medium">{produs.nume}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Cantitate: {produs.quantity}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="space-y-1">
+                              <Label htmlFor={`title-${idx}`}>Titlu</Label>
+                              <input 
+                                id={`title-${idx}`} 
+                                className="w-full p-2 border border-border rounded-md" 
+                                placeholder="Ex: Nuntă de argint"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label htmlFor={`customText-${idx}`}>Text personalizare</Label>
+                              <Textarea 
+                                id={`customText-${idx}`} 
+                                className="w-full" 
+                                placeholder="Ex: Doresc același mesaj, fără modificări"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label htmlFor={`coupleName-${idx}`}>Nume cuplu</Label>
+                              <input 
+                                id={`coupleName-${idx}`} 
+                                className="w-full p-2 border border-border rounded-md" 
+                                placeholder="Ex: Călin & Felicia"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label htmlFor={`marriageYears-${idx}`}>Ani de căsătorie</Label>
+                              <input 
+                                id={`marriageYears-${idx}`} 
+                                type="number" 
+                                className="w-full p-2 border border-border rounded-md" 
+                                placeholder="Ex: 25"
+                              />
+                            </div>
+
+                            <Button variant="outline" size="sm" className="w-full">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Câmp personalizat
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <Button className="w-full">
+                        Actualizează
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky footer */}
+          <div className="sticky bottom-0 z-10 bg-background border-t border-border p-4 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              <span className="text-green-500 animate-pulse">✓ Salvat automat</span>
+              <button className="ml-3 text-primary hover:underline">Jurnal modificări</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
+                Închide
+              </Button>
+              <Button onClick={() => {
+                // Here you would implement the confirmation logic
+                alert('Comandă confirmată!');
+                setShowConfirmModal(false);
+              }}>
+                Salvează
+              </Button>
+              <Button variant="default">
+                Procesează
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>
