@@ -1229,7 +1229,7 @@ export const Header = ({
                       <div 
                         key={leave.id} 
                         className={`border rounded-md p-2 ${
-                          isUpcoming ? 'bg-gray-900 border-blue-200' : 
+                          isUpcoming ? 'bg-gray-200 border-blue-100' : 
                           isInProgress ? 'bg-gray-900 border-green-200' : 
                           'bg-muted/10'
                         }`}

@@ -12,7 +12,7 @@ export const GiftsSlider: React.FC<GiftsSliderProps> = ({ title = "Alege un cado
   ];
 
   return (
-    <div className="border border-border rounded-md p-3 mb-4">
+    <div className="rounded-md p-3 ">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-sm font-medium">{title}</h4>
         <span className="text-xs text-muted-foreground">vizibile 6 • restul cu scroll</span>

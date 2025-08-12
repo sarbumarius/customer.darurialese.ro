@@ -5,11 +5,90 @@ import { AlertTriangle } from "lucide-react";
 type Step = { key: string; label: string; sub?: string | null };
 
 interface AwbTimelineProps {
-  steps: Step[];
+  steps?: Step[];
   proposedShippingDate?: string | null;
+  data?: any;
 }
 
-const AwbTimeline: React.FC<AwbTimelineProps> = ({ steps, proposedShippingDate }) => {
+const AwbTimeline: React.FC<AwbTimelineProps> = ({ steps: propSteps = [], proposedShippingDate, data }) => {
+  // Process data prop to extract steps if data is provided but steps are not
+  const steps = React.useMemo(() => {
+    if (propSteps && propSteps.length > 0) {
+      return propSteps;
+    }
+
+    if (!data) {
+      return [];
+    }
+
+    try {
+      // Derive step dates from notes and tracking data
+      const normalize = (s: any) => {
+        try {
+          return String(s || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+        } catch {
+          return String(s || '').toLowerCase();
+        }
+      };
+
+      // Extract order data
+      const awbOrder = data.order || {};
+
+      // Extract dates from notes
+      let gotGraphicsAt: string | null = null;
+      let approvedGraphicsAt: string | null = null;
+
+      try {
+        const notesArr = Array.isArray(awbOrder?.notes) ? awbOrder.notes : [];
+        const sortedNotes = [...notesArr];
+        try {
+          sortedNotes.sort((a: any, b: any) => new Date(a?.comment_date || '').getTime() - new Date(b?.comment_date || '').getTime());
+        } catch {}
+
+        for (const n of sortedNotes) {
+          const txt = normalize(n?.comment_content);
+          if (!gotGraphicsAt && txt.includes('starea comenzii a fost modificata') && txt.includes('din in procesare in aprobare client')) {
+            gotGraphicsAt = n?.comment_date || null;
+          }
+          if (!approvedGraphicsAt && txt.includes('din aprobare client in productie')) {
+            approvedGraphicsAt = n?.comment_date || null;
+          }
+          if (gotGraphicsAt && approvedGraphicsAt) break;
+        }
+      } catch {}
+
+      // Extract pickup date from tracking data
+      let pickupDate = null;
+      try {
+        const td = Array.isArray(data?.tracking_data) ? data.tracking_data : [];
+        if (td.length > 0) {
+          const asc = [...td].sort((a: any, b: any) => new Date(a?.timestamp || '').getTime() - new Date(b?.timestamp || '').getTime());
+          pickupDate = asc[0]?.timestamp || null;
+        }
+      } catch {}
+
+      // Create steps array
+      return [
+        { key: 'order', label: 'A dat comanda', sub: awbOrder?.post_date || null },
+        { key: 'confirm', label: 'Confirmată comanda', sub: awbOrder?.confirmare_comanda || null },
+        { key: 'got_graphics', label: 'A primit grafica', sub: gotGraphicsAt },
+        { key: 'approved_graphics', label: 'A aprobat grafica', sub: approvedGraphicsAt },
+        { key: 'picked_up', label: 'Preluat curierul', sub: pickupDate }
+      ];
+    } catch (error) {
+      console.error("Error processing AWB data:", error);
+      return [];
+    }
+  }, [propSteps, data]);
+
+  // If no steps, show a message
+  if (steps.length === 0) {
+    return <div className="p-4 text-sm text-muted-foreground">Nu există date de afișat pentru istoric.</div>;
+  }
+
   return (
     <>
       <div className="flex items-center">
@@ -103,6 +182,29 @@ const AwbTimeline: React.FC<AwbTimelineProps> = ({ steps, proposedShippingDate }
         }
         return null;
       })()}
+
+      {/* Display tracking data if available */}
+      {data && Array.isArray(data.tracking_data) && data.tracking_data.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <div className="font-medium text-sm">Istoric tracking:</div>
+          {(() => {
+            const sorted = [...data.tracking_data].sort((a: any, b: any) => {
+              const ta = new Date(a?.timestamp || '').getTime();
+              const tb = new Date(b?.timestamp || '').getTime();
+              return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+            });
+            return sorted.map((t: any, idx: number) => (
+              <div key={idx} className={`p-2 rounded-md border ${idx === 0 ? 'border-green-500 bg-green-50/40' : 'border-border'}`}>
+                <div className={`text-xs mb-1 ${idx === 0 ? 'text-green-700' : 'text-muted-foreground'}`}>{t.timestamp} {t.location ? `• ${t.location}` : ''}</div>
+                <div className={`text-sm ${idx === 0 ? 'font-bold' : 'font-medium'}`}>{t.status}</div>
+                {t.comment && (
+                  <div className="text-xs whitespace-pre-wrap text-muted-foreground mt-1">{t.comment}</div>
+                )}
+              </div>
+            ));
+          })()}
+        </div>
+      )}
     </>
   );
 };

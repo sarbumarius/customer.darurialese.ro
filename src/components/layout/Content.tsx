@@ -2,11 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, Info, Package, AlertTriangle, ShoppingCart, Eye, Printer, Gift, Database, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, MessageSquare, Send, PhoneCall, CalendarClock, Layers, BadgeCheck, Plus, Mail, MessageCircle, ImageOff, Cog } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Check, X, Info, AlertTriangle, ShoppingCart, Gift, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MessageSquare, Send, PhoneCall, CalendarClock, Layers, BadgeCheck, Plus, Mail, ImageOff, Cog } from "lucide-react";
+
 import { Label } from "@/components/ui/label";
 import { Comanda, Produs, StatItem } from "@/types/dashboard";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -48,7 +45,19 @@ import { isRomanianPhoneNumber, isLikelyValidEmail } from "@/utils/validation";
 
 
 import AwbTimeline from "@/components/content/AwbTimeline";
-import { ProblemDialog, GalleryDialog, StudiuDialog, InventoryDialog, ConfirmOrderDialog } from "@/components/layout/dialogs";
+import { 
+  ProblemDialog, 
+  GalleryDialog, 
+  StudiuDialog, 
+  InventoryDialog, 
+  ConfirmOrderDialog,
+  NotesOffCanvas,
+  AddWpNoteModal,
+  RetrimitereGraficaModal,
+  EmailComposeModal,
+  AwbTicketModal,
+  AwbTrackingOffCanvas
+} from "@/components/layout/dialogs";
 
 export const Content = ({
   statsData,
@@ -88,7 +97,7 @@ export const Content = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmOrder, setConfirmOrder] = useState<Comanda | null>(null);
   const [activeAddressTab, setActiveAddressTab] = useState<'shipping' | 'billing'>('shipping');
-  const [activeConfirmTab, setActiveConfirmTab] = useState<'confirmare' | 'sms' | 'notite' | 'puncte' | 'persoane'>('confirmare');
+  const [activeConfirmTab, setActiveConfirmTab] = useState<'confirmare' | 'sms' | 'puncte' | 'persoane'>('confirmare');
   // AWB tracking modal state
   const [showAwbModal, setShowAwbModal] = useState(false);
   const [awbLoading, setAwbLoading] = useState(false);
@@ -136,11 +145,6 @@ export const Content = ({
   const [emailMessage, setEmailMessage] = useState<string>("");
   const [emailSubmitting, setEmailSubmitting] = useState<boolean>(false);
 
-  // State for inline product annex panel (expanded under status row)
-  const [expandedProdPanel, setExpandedProdPanel] = useState<{
-    orderId: number;
-    productIndex: number;
-  } | null>(null);
 
   // Form state for problem reporting
   const [problemZone, setProblemZone] = useState<string>("");
@@ -222,7 +226,6 @@ export const Content = ({
   // Floating chat state (Chat cu Grafica)
   type ChatMsg = { from: 'eu' | 'grafica'; text: string; time: string };
   const [showChat, setShowChat] = useState(false);
-  const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([
     { from: 'grafica', text: 'Salut! Cu ce te pot ajuta la fișierul de gravare?', time: '09:12' },
     { from: 'eu', text: 'Salut! Putem mări textul cu 10% și să-l centram?', time: '09:13' },
@@ -1153,9 +1156,9 @@ export const Content = ({
         <div className="sticky top-20 z-40 grid grid-cols-1 sm:grid-cols-8 gap-2 relative p-3 border border-b-1 border-border bg-white dark:bg-[#020817] shadow-sm">
           {/* Mobile toggle button for expanding/collapsing statuses */}
           <div className="sm:hidden w-full mb-2 flex justify-center -mt-8">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setAreStatusesExpanded(!areStatusesExpanded)}
               className="flex items-center gap-1 text-xs"
             >
@@ -1231,23 +1234,7 @@ export const Content = ({
             );
           })}
 
-          {/* Cache/Live status indicator - always visible on all screen sizes */}
-          {/*<div className="border-2 border-green-500 rounded-lg p-2 flex items-center justify-center col-span-1 sm:col-span-1">*/}
-          {/*  {isLoadingStatus ? (*/}
-          {/*    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>*/}
-          {/*  ) : (*/}
-          {/*    <div className="flex items-center">*/}
-          {/*      <div */}
-          {/*        className={`w-4 h-4 rounded-full mr-2 ${*/}
-          {/*          isFromCache */}
-          {/*            ? 'bg-green-500 animate-pulse' */}
-          {/*            : 'bg-red-500 animate-pulse'*/}
-          {/*        }`}*/}
-          {/*      ></div>*/}
-          {/*      <span className="text-xs font-medium">{isFromCache ? 'Cache' : 'Live'}</span>*/}
-          {/*    </div>*/}
-          {/*  )}*/}
-          {/*</div>*/}
+
         </div>
 
         {/* Panou global anexe produs - ascuns conform cerinței */}
@@ -1369,7 +1356,7 @@ export const Content = ({
 
 
 
-        {isLoading && <div className="p-4">Se încarcă statisticile...</div>}
+        {/*{isLoading && <div className="p-4">Se încarcă statisticile...</div>}*/}
 
         {isLoadingComenzi && (
           <div className="fixed top-4 right-4 bg-black/80 text-white px-4 py-2 rounded-md z-50 flex items-center gap-2">
@@ -1390,10 +1377,10 @@ export const Content = ({
             <Card className="p-8 text-center">
               <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground">
-                {selectedProductId && selectedShippingData 
-                  ? "Nu există comenzi cu produsul selectat și data de expediere selectată" 
-                  : selectedShippingData 
-                    ? "Nu există comenzi cu data de expediere selectată" 
+                {selectedProductId && selectedShippingData
+                  ? "Nu există comenzi cu produsul selectat și data de expediere selectată"
+                  : selectedShippingData
+                    ? "Nu există comenzi cu data de expediere selectată"
                     : "Nu există comenzi cu produsul selectat"}
               </p>
             </Card>
@@ -1441,9 +1428,9 @@ export const Content = ({
             <div className="mt-2 p-2 border border-border rounded-md bg-white">
               <div className="flex items-center gap-2 mb-1">
                 {selectedStatus && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="h-7 px-2 text-xs"
                     onClick={() => setSelectedStatus(null)}
                   >
@@ -1454,16 +1441,16 @@ export const Content = ({
               </div>
               <div className="flex flex-wrap gap-2">
                 {statusesWithCounts.map(({ status, count }) => (
-                  <Badge 
-                    key={status} 
+                  <Badge
+                    key={status}
                     variant={selectedStatus === status ? "default" : "outline"}
                     className="cursor-pointer"
                     onClick={() => setSelectedStatus(selectedStatus === status ? null : status)}
                   >
-                    {status.startsWith("wc-") 
-                      ? status.substring(3).split(/[-\s]+/).map(word => 
+                    {status.startsWith("wc-")
+                      ? status.substring(3).split(/[-\s]+/).map(word =>
                           word.charAt(0).toUpperCase() + word.slice(1)
-                        ).join(' ') 
+                        ).join(' ')
                       : status} ({count})
                   </Badge>
                 ))}
@@ -1627,7 +1614,13 @@ export const Content = ({
                                 <div className="flex items-start gap-2 min-w-0">
                                   <div className="flex-1 min-w-0">
                                     <div className="text-base sm:text-lg font-semibold leading-none truncate flex items-center gap-1" title={primaryName || '-' }>
-                                      <span className="truncate">{primaryName || '-'}</span>
+                                      <button 
+                                        className="truncate text-left hover:text-primary hover:underline cursor-pointer"
+                                        onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
+                                        title="Click pentru a deschide dialogul de confirmare"
+                                      >
+                                        {primaryName || '-'}
+                                      </button>
                                       {(() => {
                                         const v: any = (c as any).fara_factura_in_colet;
                                         const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
@@ -1638,14 +1631,26 @@ export const Content = ({
                                     </div>
                                     {showSecondary && secondaryName && (
                                       <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={secondaryName}>
-                                        {secondaryName}
+                                        <button 
+                                          className="text-muted-foreground hover:text-primary hover:underline cursor-pointer truncate"
+                                          onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
+                                          title="Click pentru a deschide dialogul de confirmare"
+                                        >
+                                          {secondaryName}
+                                        </button>
                                       </div>
                                     )}
                                     {(() => {
                                       const comp = (c.billing_details?._billing_numefirma || '').trim();
                                       return comp ? (
                                         <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={comp}>
-                                          Firma: <span className="font-medium text-foreground">{comp}</span>
+                                          Firma: <button 
+                                            className="font-medium text-foreground hover:text-primary hover:underline cursor-pointer"
+                                            onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
+                                            title="Click pentru a deschide dialogul de confirmare"
+                                          >
+                                            {comp}
+                                          </button>
                                         </div>
                                       ) : null;
                                     })()}
@@ -1827,411 +1832,119 @@ export const Content = ({
                           )}
                           <TableCell>
                             {zonaActiva === 'backlines' ? (
-                              <BacklinesZoneActions 
-                                order={c} 
-                                phone={phone} 
-                                onAddMention={(order) => { setCurrentOrder(order); setShowProblemModal(true); }} 
+                              <BacklinesZoneActions
+                                order={c}
+                                phone={phone}
+                                onAddMention={(order) => { setCurrentOrder(order); setShowProblemModal(true); }}
+                              />
+                            ) : zonaActiva === 'precomanda' ? (
+                              <PrecomandaZoneActions
+                                order={c}
+                                onMarkLipsaPoze={(order) => { setAddWpNoteText('Lipsa poze'); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(order.ID); setShowAddWpNoteModal(true); }}
+                                onProcesare={handleMutaProcesareClick}
+                                onAnulare={handleMutaAnulareClick}
+                                movingCommandId={movingCommandId}
                               />
                             ) : (
                               <div className="flex gap-2">
-                                {zonaActiva === 'precomanda' ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => { setAddWpNoteText('Lipsa poze'); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(c.ID); setShowAddWpNoteModal(true); }}
-                                      title="Lipsa poze"
-                                      aria-label="Lipsa poze"
-                                    >
-                                      Lipsa poze
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaProcesareClick(c.ID)}
-                                      title="Procesare"
-                                      aria-label="Procesare"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Procesare</span>
-                                          <Cog className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => handleMutaAnulareClick(c.ID)}
-                                      title="Anulează"
-                                      aria-label="Anulează"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                          <span>Se anulează...</span>
-                                        </div>
-                                      ) : (
-                                        <X className="w-4 h-4" />
-                                      )}
-                                    </Button>
-                                  </>
-                                ) : (zonaActiva === 'platainasteptare' || zonaActiva === 'inasteptare') ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
-                                      title="Precomanda"
-                                      aria-label="Precomanda"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Precomanda</span>
-                                          <CalendarClock className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaLipsaPozeClick(c.ID)}
-                                      title="Lipsa poza"
-                                      aria-label="Lipsa poza"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se mută...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Lipsa poza</span>
-                                          <ImageOff className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaProcesareClick(c.ID)}
-                                      title="Procesare"
-                                      aria-label="Procesare"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Procesare</span>
-                                          <Cog className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => handleMutaAnulareClick(c.ID)}
-                                      title="Anulează"
-                                      aria-label="Anulează"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                          <span>Se anulează...</span>
-                                        </div>
-                                      ) : (
-                                        <X className="w-4 h-4" />
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="default"
-                                      size="sm"
-                                      onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
-                                      title="Confirmare"
-                                      aria-label="Confirmare"
-                                    >
-                                      <Check className="w-4 h-4" />
-                                    </Button>
-                                                                  </>
-                                                                ) : (zonaActiva === 'neconfirmate' || zonaActiva === 'desunat' || zonaActiva === 'procesare') ? (
-                                                                  <>
-                                                                    <Button
-                                                                      variant="outline"
-                                                                      size="sm"
-                                                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
-                                                                      title="Precomanda"
-                                                                      aria-label="Precomanda"
-                                                                      disabled={movingCommandId === c.ID}
-                                                                    >
-                                                                      {movingCommandId === c.ID ? (
-                                                                        <div className="flex items-center">
-                                                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                                                          <span>Se procesează...</span>
-                                                                        </div>
-                                                                      ) : (
-                                                                        <>
-                                                                          <span>Precomanda</span>
-                                                                          <CalendarClock className="w-4 h-4 ml-1" />
-                                                                        </>
-                                                                      )}
-                                                                    </Button>
-                                                                    <Button
-                                                                      variant="outline"
-                                                                      size="sm"
-                                                                      onClick={() => handleMutaLipsaPozeClick(c.ID)}
-                                                                      title="Lipsa poza"
-                                                                      aria-label="Lipsa poza"
-                                                                      disabled={movingCommandId === c.ID}
-                                                                    >
-                                                                      {movingCommandId === c.ID ? (
-                                                                        <div className="flex items-center">
-                                                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                                                          <span>Se mută...</span>
-                                                                        </div>
-                                                                      ) : (
-                                                                        <>
-                                                                          <span>Lipsa poza</span>
-                                                                          <ImageOff className="w-4 h-4 ml-1" />
-                                                                        </>
-                                                                      )}
-                                                                    </Button>
-                                                                    {(zonaActiva !== 'neconfirmate' || motivesActiveCount >= 3) && (
-                                                                      <Button
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        onClick={() => handleMutaAnulareClick(c.ID)}
-                                                                        title="Anulează"
-                                                                        aria-label="Anulează"
-                                                                        disabled={movingCommandId === c.ID}
-                                                                      >
-                                                                        {movingCommandId === c.ID ? (
-                                                                          <div className="flex items-center">
-                                                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                                                            <span>Se anulează...</span>
-                                                                          </div>
-                                                                        ) : (
-                                                                          <X className="w-4 h-4" />
-                                                                        )}
-                                                                      </Button>
-                                                                    )}
-                                                                    <Button
-                                                                      variant="default"
-                                                                      size="sm"
-                                                                      onClick={() => { setConfirmOrder(c); setShowConfirmModal(true); }}
-                                                                      title="Confirmare"
-                                                                      aria-label="Confirmare"
-                                                                    >
-                                                                      <Check className="w-4 h-4" />
-                                                                    </Button>
-                                                                  </>
-                                                                ) : (zonaActiva === 'aprobare' || zonaActiva === 'aprobareclient') ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleRetrimitereGraficaClick(c.ID)}
-                                      title="Retrimitere grafica"
-                                      aria-label="Retrimitere grafica"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se retrimite...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Retrimitere grafica</span>
-                                          <Send className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaProductieClick(c.ID)}
-                                      title="Productie"
-                                      aria-label="Productie"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Productie</span>
-                                          <Layers className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaGraficaGresitaClick(c.ID)}
-                                      title="Grafica gresita"
-                                      aria-label="Grafica gresita"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se mută...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Grafica gresita</span>
-                                          <AlertTriangle className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => handleMutaAnulareClick(c.ID)}
-                                      title="Anulează"
-                                      aria-label="Anulează"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                          <span>Se anulează...</span>
-                                        </div>
-                                      ) : (
-                                        <X className="w-4 h-4" />
-                                      )}
-                                    </Button>
-                                  </>
+                                {zonaActiva === 'platainasteptare' ? (
+                                  <PlataInAsteptareZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    onPrecomanda={handleMutaPrecomandaClick}
+                                    onLipsaPoze={handleMutaLipsaPozeClick}
+                                    onProcesare={handleMutaProcesareClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                    onConfirmareOpen={(order) => { setConfirmOrder(order); setShowConfirmModal(true); }}
+                                  />
+                                ) : zonaActiva === 'inasteptare' ? (
+                                  <InAsteptareZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    onPrecomanda={handleMutaPrecomandaClick}
+                                    onLipsaPoze={handleMutaLipsaPozeClick}
+                                    onProcesare={handleMutaProcesareClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                    onConfirmareOpen={(order) => { setConfirmOrder(order); setShowConfirmModal(true); }}
+                                  />
+                                ) : zonaActiva === 'neconfirmate' ? (
+                                  <NeconfirmateZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    motivesActiveCount={motivesActiveCount}
+                                    onPrecomanda={handleMutaPrecomandaClick}
+                                    onLipsaPoze={handleMutaLipsaPozeClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                    onConfirmareOpen={(order) => { setConfirmOrder(order); setShowConfirmModal(true); }}
+                                  />
+                                ) : zonaActiva === 'desunat' ? (
+                                  <DeSunatZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    onPrecomanda={handleMutaPrecomandaClick}
+                                    onLipsaPoze={handleMutaLipsaPozeClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                    onConfirmareOpen={(order) => { setConfirmOrder(order); setShowConfirmModal(true); }}
+                                  />
+                                ) : zonaActiva === 'procesare' ? (
+                                  <ProcesareZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    onPrecomanda={handleMutaPrecomandaClick}
+                                    onLipsaPoze={handleMutaLipsaPozeClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                    onConfirmareOpen={(order) => { setConfirmOrder(order); setShowConfirmModal(true); }}
+                                  />
+                                ) : (zonaActiva === 'aprobare' || zonaActiva === 'aprobareclient') ? (
+                                  <AprobareZoneActions
+                                    order={c}
+                                    movingCommandId={movingCommandId}
+                                    onRetrimitereGrafica={handleRetrimitereGraficaClick}
+                                    onProductie={handleMutaProductieClick}
+                                    onGraficaGresita={handleMutaGraficaGresitaClick}
+                                    onAnulare={handleMutaAnulareClick}
+                                  />
                                 ) : zonaActiva === 'lipsapoze' ? (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => { setFollowUpOrder(c); setFollowUpEmailMessage('Sa nu uite sa trimita poza'); setShowFollowUpEmailModal(true); }}
-                                      title="Trimite email Follow up"
-                                      aria-label="Trimite email Follow up"
-                                      className="inline-flex items-center gap-1"
-                                    >
-                                      <Mail className="w-4 h-4" />
-                                      <span>Follow up</span>
-                                    </Button>
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      onClick={() => {
-                                        try {
-                                          const sp = (c.shipping_details as any)?._shipping_phone || '';
-                                          const bp = (c.billing_details as any)?._billing_phone || '';
-                                          const pick = String(sp || bp || '').trim();
-                                          if (!pick) { alert('Nu există telefon pentru WhatsApp.'); return; }
-                                          let s = pick.replace(/\D/g, '');
-                                          if (s.startsWith('00')) s = s.slice(2);
-                                          if (s.startsWith('40')) {
-                                            // OK
-                                          } else if (s.startsWith('0')) {
-                                            s = '4' + s; // 0XXXXXXXXX -> 4XXXXXXXXX (becomes 40... once prefixed)
-                                            if (!s.startsWith('40')) s = '40' + s.slice(1);
-                                          } else if (s.startsWith('7') && s.length === 9) {
-                                            s = '40' + s;
-                                          } else if (s.startsWith('+' )) {
-                                            s = s.slice(1);
-                                          }
-                                          const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
-                                          const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
-                                          const nume = `${first} ${last}`.trim();
-                                          const msg = `Bună ziua${nume ? ' ' + nume : ''}, vă rugăm să ne trimiteți poza pentru comanda #${c.ID}. Mulțumim!`;
-                                          const url = `https://wa.me/${s}?text=${encodeURIComponent(msg)}`;
-                                          window.open(url, '_blank');
-                                        } catch (e) {
-                                          alert('Nu s-a putut deschide WhatsApp.');
+                                  <LipsaPozeZoneActions
+                                    order={c}
+                                    onFollowUpEmail={(order) => { setFollowUpOrder(order); setFollowUpEmailMessage('Sa nu uite sa trimita poza'); setShowFollowUpEmailModal(true); }}
+                                    onOpenWhatsApp={(order) => {
+                                      try {
+                                        const sp = (order.shipping_details as any)?._shipping_phone || '';
+                                        const bp = (order.billing_details as any)?._billing_phone || '';
+                                        const pick = String(sp || bp || '').trim();
+                                        if (!pick) { alert('Nu există telefon pentru WhatsApp.'); return; }
+                                        let s = pick.replace(/\D/g, '');
+                                        if (s.startsWith('00')) s = s.slice(2);
+                                        if (s.startsWith('40')) {
+                                          // OK
+                                        } else if (s.startsWith('0')) {
+                                          s = '4' + s; // 0XXXXXXXXX -> 4XXXXXXXXX (becomes 40... once prefixed)
+                                          if (!s.startsWith('40')) s = '40' + s.slice(1);
+                                        } else if (s.startsWith('7') && s.length === 9) {
+                                          s = '40' + s;
+                                        } else if (s.startsWith('+' )) {
+                                          s = s.slice(1);
                                         }
-                                      }}
-                                      title="Cere poza pe WhatsApp"
-                                      aria-label="Cere poza pe WhatsApp"
-                                      className="inline-flex items-center gap-1"
-                                    >
-                                      <MessageCircle className="w-4 h-4" />
-                                      <span>WhatsApp</span>
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaPrecomandaClick(c.ID)}
-                                      title="Precomanda"
-                                      aria-label="Precomanda"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Precomanda</span>
-                                          <CalendarClock className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleMutaProcesareClick(c.ID)}
-                                      title="Procesare"
-                                      aria-label="Procesare"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                                          <span>Se procesează...</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <span>Procesare</span>
-                                          <Cog className="w-4 h-4 ml-1" />
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={() => handleMutaAnulareClick(c.ID)}
-                                      title="Anulează"
-                                      aria-label="Anulează"
-                                      disabled={movingCommandId === c.ID}
-                                    >
-                                      {movingCommandId === c.ID ? (
-                                        <div className="flex items-center">
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                          <span>Se anulează...</span>
-                                        </div>
-                                      ) : (
-                                        <X className="w-4 h-4" />
-                                      )}
-                                    </Button>
-                                  </>
+                                        const first = order.billing_details?._billing_first_name || order.shipping_details._shipping_first_name || '';
+                                        const last = order.billing_details?._billing_last_name || order.shipping_details._shipping_last_name || '';
+                                        const nume = `${first} ${last}`.trim();
+                                        const msg = `Bună ziua${nume ? ' ' + nume : ''}, vă rugăm să ne trimiteți poza pentru comanda #${order.ID}. Mulțumim!`;
+                                        const url = `https://wa.me/${s}?text=${encodeURIComponent(msg)}`;
+                                        window.open(url, '_blank');
+                                      } catch (e) {
+                                        alert('Nu s-a putut deschide WhatsApp.');
+                                      }
+                                    }}
+                                  />
+                                ) : zonaActiva === 'confirmate' ? (
+                                  <ConfirmateZoneActions
+                                    order={c}
+                                  />
+                                ) : zonaActiva === 'gresite' ? (
+                                  <GresiteZoneActions
+                                    order={c}
+                                  />
                                 ) : (
                                   <>
                                     {isDPD && c.awb_curier && (
@@ -2273,7 +1986,7 @@ export const Content = ({
                                       <CalendarClock className="w-4 h-4" />
                                     </Button>
                                     <Button
-                                      variant="outline" 
+                                      variant="outline"
                                       size="sm"
                                       onClick={() => handleMutaLipsaPozeClick(c.ID)}
                                       disabled={movingCommandId === c.ID}
@@ -2309,1087 +2022,112 @@ export const Content = ({
             )}
 
             {/* Notes off-canvas */}
-            {showNotesPanel && (
-              <div className="fixed inset-0 z-50">
-                <div className="absolute inset-0 bg-black/50" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); setShowAddWpNoteModal(false); }} />
-                <div className="absolute right-0 top-0 h-full w-[90vw] sm:w-[460px] bg-white dark:bg-[#020817] border-l border-border shadow-xl flex flex-col">
-                  <div className="p-3 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="w-5 h-5" />
-                      <div className="font-semibold">Notițe comandă #{notesOrder?.ID}</div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2"
-                        title="Adaugă notiță WordPress"
-                        onClick={() => { setAddWpNoteText(''); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(notesOrder?.ID || null); setShowAddWpNoteModal(true); }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); }}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {Array.isArray(notesOrder?.notes) && notesOrder!.notes.length > 0 ? (
-                      notesOrder!.notes.map((n, idx) => (
-                        <div key={idx} className="p-2 rounded-md border border-border">
-                          <div className="text-xs text-muted-foreground mb-1">{n.comment_date}</div>
-                          <div className="text-sm whitespace-pre-wrap break-words">{n.comment_content}</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
-                    )}
-                  </div>
-                  <div className="p-3 border-t border-border text-right">
-                    <Button variant="outline" size="sm" onClick={() => { setShowNotesPanel(false); setNotesOrder(null); }}>Închide</Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <NotesOffCanvas
+              showNotesPanel={showNotesPanel}
+              notesOrder={notesOrder}
+              setShowNotesPanel={setShowNotesPanel}
+              setNotesOrder={setNotesOrder}
+              setAddWpNoteText={setAddWpNoteText}
+              setAddWpNoteError={setAddWpNoteError}
+              setAddWpNoteVisibleToCustomer={setAddWpNoteVisibleToCustomer}
+              setAddNoteOrderId={setAddNoteOrderId}
+              setShowAddWpNoteModal={setShowAddWpNoteModal}
+            />
 
             {/* Add WP Note modal (UI only) */}
-            {showAddWpNoteModal && (
-              <div className="fixed inset-0 z-[60]">
-                {/* Backdrop that only closes this modal, not the notes off-canvas */}
-                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }} />
-                <div className="absolute inset-x-0 top-12 mx-auto w-[94vw] sm:w-[520px] bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
-                  <div className="p-3 border-b border-border flex items-center justify-between">
-                    <div className="font-semibold">Trimite notiță WordPress pentru comanda #{addNoteOrderId || notesOrder?.ID || awbOrder?.ID}</div>
-                    <Button variant="ghost" size="sm" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }}>
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <div className="p-3 space-y-3">
-                    {addWpNoteError && <div className="text-sm text-red-600">{addWpNoteError}</div>}
-                    <div>
-                      <Label htmlFor="wp-note-text" className="text-sm">Mesaj</Label>
-                      <textarea
-                        id="wp-note-text"
-                        className="mt-1 w-full min-h-[120px] p-2 border rounded bg-background text-foreground border-input text-sm"
-                        placeholder="Scrie notița aici..."
-                        value={addWpNoteText}
-                        onChange={(e) => setAddWpNoteText(e.target.value)}
-                        disabled={addWpNoteSubmitting}
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm select-none">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={addWpNoteVisibleToCustomer}
-                        onChange={(e) => setAddWpNoteVisibleToCustomer(e.target.checked)}
-                        disabled={addWpNoteSubmitting}
-                      />
-                      Vizibil pentru client
-                    </label>
-                  </div>
-                  <div className="p-3 border-t border-border flex items-center justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { if (!addWpNoteSubmitting) { setShowAddWpNoteModal(false); setAddNoteOrderId(null); } }}>Renunță</Button>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (addWpNoteSubmitting) return;
-                        setAddWpNoteError(null);
-                        const text = (addWpNoteText || '').trim();
-                        if (!text) {
-                          setAddWpNoteError('Te rugăm să scrii un mesaj.');
-                          return;
-                        }
-                        setAddWpNoteSubmitting(true);
-                        // Simulare succes local: adăugăm notița în lista potrivită și închidem doar acest modal
-                        try {
-                          const now = new Date();
-                          const pad = (n: number) => String(n).padStart(2, '0');
-                          const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-                          const newNote = { comment_date: dateStr, comment_content: text } as any;
-                          if (notesOrder?.ID && notesOrder.ID === addNoteOrderId) {
-                            setNotesOrder(prev => {
-                              if (!prev) return prev;
-                              const prevNotes = Array.isArray(prev.notes) ? prev.notes : [];
-                              return { ...prev, notes: [...prevNotes, newNote] };
-                            });
-                          }
-                          if (awbOrder?.ID && awbOrder.ID === addNoteOrderId) {
-                            setAwbOrder(prev => {
-                              if (!prev) return prev;
-                              const prevNotes = Array.isArray(prev.notes) ? prev.notes : [];
-                              return { ...prev, notes: [...prevNotes, newNote] } as any;
-                            });
-                          }
-                          setShowAddWpNoteModal(false);
-                          setAddWpNoteSubmitting(false);
-                          setAddWpNoteText('');
-                          setAddNoteOrderId(null);
-                          // Optional: toast/alert minimal
-                          // alert('Notița a fost adăugată local. API-ul urmează.');
-                        } catch (e) {
-                          setAddWpNoteError('A apărut o eroare locală.');
-                          setAddWpNoteSubmitting(false);
-                        }
-                      }}
-                    >
-                      {addWpNoteSubmitting ? 'Se trimite…' : 'Trimite'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <AddWpNoteModal
+              showAddWpNoteModal={showAddWpNoteModal}
+              addWpNoteText={addWpNoteText}
+              addWpNoteVisibleToCustomer={addWpNoteVisibleToCustomer}
+              addWpNoteSubmitting={addWpNoteSubmitting}
+              addWpNoteError={addWpNoteError}
+              addNoteOrderId={addNoteOrderId}
+              notesOrder={notesOrder}
+              awbOrder={awbOrder}
+              setShowAddWpNoteModal={setShowAddWpNoteModal}
+              setAddWpNoteText={setAddWpNoteText}
+              setAddWpNoteVisibleToCustomer={setAddWpNoteVisibleToCustomer}
+              setAddWpNoteSubmitting={setAddWpNoteSubmitting}
+              setAddWpNoteError={setAddWpNoteError}
+              setAddNoteOrderId={setAddNoteOrderId}
+              setNotesOrder={setNotesOrder}
+              setAwbOrder={setAwbOrder}
+            />
 
             {/* Retrimitere grafică modal */}
-            {showResendGraphicModal && (
-              <div className="fixed inset-0 z-[60]">
-                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }} />
-                <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <div className="w-[96vw] sm:w-[600px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
-                    <div className="p-3 border-b border-border flex items-center justify-between">
-                      <div className="font-semibold">Retrimitere grafică {resendOrder ? `#${resendOrder.ID}` : ''}</div>
-                      <Button variant="ghost" size="sm" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <div className="p-3 space-y-3 text-sm">
-                      <div className="flex flex-col gap-2">
-                        <label className="inline-flex items-center gap-2 select-none">
-                          <input type="checkbox" className="h-4 w-4" checked={resendViaEmail} onChange={(e) => setResendViaEmail(e.target.checked)} disabled={resendSubmitting} />
-                          <span className="inline-flex items-center gap-1"><Mail className="w-4 h-4" /> Email</span>
-                        </label>
-                        <label className="inline-flex items-center gap-2 select-none">
-                          <input type="checkbox" className="h-4 w-4" checked={resendViaSMS} onChange={(e) => setResendViaSMS(e.target.checked)} disabled={resendSubmitting} />
-                          <span className="inline-flex items-center gap-1"><MessageSquare className="w-4 h-4" /> SMS</span>
-                        </label>
-                        <label className="inline-flex items-center gap-2 select-none">
-                          <input type="checkbox" className="h-4 w-4" checked={resendViaWhatsApp} onChange={(e) => setResendViaWhatsApp(e.target.checked)} disabled={resendSubmitting} />
-                          <span className="inline-flex items-center gap-1"><MessageCircle className="w-4 h-4" /> WhatsApp</span>
-                        </label>
-                        <div className="text-[12px] text-muted-foreground">Alege canalele pentru retrimiterea graficii. Mesajul de mai jos va fi folosit la trimitere.</div>
-                      </div>
-                      <div>
-                        <Label htmlFor="resend-msg" className="text-sm">Mesaj</Label>
-                        <textarea id="resend-msg" className="mt-1 w-full min-h-[140px] p-2 border rounded bg-background text-foreground border-input text-sm" placeholder="Scrie mesajul care va fi trimis..." value={resendMessage} onChange={(e) => setResendMessage(e.target.value)} disabled={resendSubmitting} />
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { if (!resendSubmitting) { setShowResendGraphicModal(false); setResendOrder(null); } }}>Renunță</Button>
-                      <Button size="sm" onClick={() => { if (resendSubmitting) return; setResendSubmitting(true); setTimeout(() => { setResendSubmitting(false); setShowResendGraphicModal(false); setResendOrder(null); }, 300); }}>
-                        {resendSubmitting ? 'Se trimite…' : 'Trimite'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <RetrimitereGraficaModal
+              showResendGraphicModal={showResendGraphicModal}
+              resendOrder={resendOrder}
+              resendSubmitting={resendSubmitting}
+              resendViaEmail={resendViaEmail}
+              resendViaSMS={resendViaSMS}
+              resendViaWhatsApp={resendViaWhatsApp}
+              resendMessage={resendMessage}
+              setShowResendGraphicModal={setShowResendGraphicModal}
+              setResendOrder={setResendOrder}
+              setResendSubmitting={setResendSubmitting}
+              setResendViaEmail={setResendViaEmail}
+              setResendViaSMS={setResendViaSMS}
+              setResendViaWhatsApp={setResendViaWhatsApp}
+              setResendMessage={setResendMessage}
+            />
 
             {/* Email compose modal (UI only) */}
-            {showEmailSendModal && (
-              <div className="fixed inset-0 z-[60]">
-                {/* Backdrop closes only this modal */}
-                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }} />
-                <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <div className="w-[96vw] sm:w-[640px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
-                    <div className="p-3 border-b border-border flex items-center justify-between">
-                      <div className="font-semibold">Trimite email</div>
-                      <Button variant="ghost" size="sm" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <div className="p-3 space-y-3 text-sm">
-                      <div className="grid grid-cols-1 gap-3">
-                        <div>
-                          <Label htmlFor="email-to" className="text-sm">Către</Label>
-                          <input id="email-to" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} disabled={emailSubmitting} />
-                        </div>
-                        <div>
-                          <Label htmlFor="email-from" className="text-sm">De la</Label>
-                          <input id="email-from" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} disabled={emailSubmitting} />
-                        </div>
-                        <div>
-                          <Label htmlFor="email-subject" className="text-sm">Subiect</Label>
-                          <input id="email-subject" type="text" className="mt-1 w-full h-9 px-2 border rounded bg-background text-foreground border-input text-sm" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} disabled={emailSubmitting} />
-                        </div>
-                        <div>
-                          <Label htmlFor="email-message" className="text-sm">Mesaj</Label>
-                          <textarea id="email-message" className="mt-1 w-full min-h-[160px] p-2 border rounded bg-background text-foreground border-input text-sm" placeholder="Scrie mesajul aici..." value={emailMessage} onChange={(e) => setEmailMessage(e.target.value)} disabled={emailSubmitting} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { if (!emailSubmitting) { setShowEmailSendModal(false); setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage(''); } }}>Renunță</Button>
-                      <Button size="sm"
-                        disabled={emailSubmitting || !isLikelyValidEmail(emailTo) || !isLikelyValidEmail(emailFrom)}
-                        onClick={() => {
-                          if (emailSubmitting) return;
-                          setEmailSubmitting(true);
-                          setTimeout(() => {
-                            setEmailSubmitting(false);
-                            setShowEmailSendModal(false);
-                            setEmailTo(''); setEmailFrom(''); setEmailSubject(''); setEmailMessage('');
-                          }, 300);
-                        }}
-                      >
-                        {emailSubmitting ? 'Se trimite…' : 'Trimite'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <EmailComposeModal
+              showEmailSendModal={showEmailSendModal}
+              emailSubmitting={emailSubmitting}
+              emailTo={emailTo}
+              emailFrom={emailFrom}
+              emailSubject={emailSubject}
+              emailMessage={emailMessage}
+              setShowEmailSendModal={setShowEmailSendModal}
+              setEmailSubmitting={setEmailSubmitting}
+              setEmailTo={setEmailTo}
+              setEmailFrom={setEmailFrom}
+              setEmailSubject={setEmailSubject}
+              setEmailMessage={setEmailMessage}
+            />
 
             {/* AWB Ticket modal (DPD backline) */}
-            {showAwbTicketModal && (
-              <div className="fixed inset-0 z-[60]">
-                {/* Backdrop closes only this modal */}
-                <div className="absolute inset-0 bg-black/50" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }} />
-                <div className="absolute inset-0 flex items-center justify-center p-4">
-                  <div className="w-[96vw] sm:w-[680px] md:w-[760px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#020817] border border-border rounded-md shadow-xl">
-                    <div className="p-3 border-b border-border flex items-center justify-between">
-                      <div className="font-semibold">Trimite tichet DPD</div>
-                      <Button variant="ghost" size="sm" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <div className="p-3 space-y-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="text-muted-foreground w-16">Către</div>
-                        <input 
-                          type="text" 
-                          className="flex-1 p-1 border rounded text-sm" 
-                          value={awbTicketTo} 
-                          onChange={(e) => setAwbTicketTo(e.target.value)}
-                          disabled={sendTicketSubmitting}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-muted-foreground w-16">CC</div>
-                        <input 
-                          type="text" 
-                          className="flex-1 p-1 border rounded text-sm" 
-                          value={awbTicketCc} 
-                          onChange={(e) => setAwbTicketCc(e.target.value)}
-                          disabled={sendTicketSubmitting}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-muted-foreground w-16">Subiect</div>
-                        <input 
-                          type="text" 
-                          className="flex-1 p-1 border rounded text-sm" 
-                          value={awbTicketSubject || (() => {
-                            const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                            const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                            const nm = `${first} ${last}`.trim() || '-';
-                            const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
-                            const awb = awbInfo?.awb || 'AWB';
-                            return `${awb} - Problema comanda ${nm} ${id}`;
-                          })()}
-                          onChange={(e) => setAwbTicketSubject(e.target.value)}
-                          disabled={sendTicketSubmitting}
-                        />
-                      </div>
-
-                      {/* Mesaj */}
-                      <div>
-                        <Label className="text-sm">Mesaj</Label>
-                        {/* Toolbar */}
-                        <div className="mt-1 mb-2 flex flex-wrap gap-1">
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('bold'); }}>B</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2 italic" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('italic'); }}>I</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2 underline" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('underline'); }}>U</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('insertUnorderedList'); }}>• Listă</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('insertOrderedList'); }}>1. Listă</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('formatBlock', false, 'h2'); }}>H2</Button>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('formatBlock', false, 'h3'); }}>H3</Button>
-                          <select
-                            className="h-7 px-2 border border-input rounded text-xs bg-background text-foreground"
-                            disabled={sendTicketSubmitting}
-                            defaultValue="normal"
-                            onChange={(e) => {
-                              awbEditorRef.current?.focus();
-                              if (e.target.value === 'normal') {
-                                document.execCommand('removeFormat');
-                              } else if (e.target.value === 'small') {
-                                document.execCommand('fontSize', false, '2');
-                              } else if (e.target.value === 'medium') {
-                                document.execCommand('fontSize', false, '3');
-                              } else if (e.target.value === 'large') {
-                                document.execCommand('fontSize', false, '5');
-                              }
-                            }}
-                          >
-                            <option value="normal">Text</option>
-                            <option value="small">Mic</option>
-                            <option value="medium">Mediu</option>
-                            <option value="large">Mare</option>
-                          </select>
-                          <Button type="button" variant="outline" size="sm" className="h-7 px-2" disabled={sendTicketSubmitting}
-                                  onClick={() => { awbEditorRef.current?.focus(); document.execCommand('removeFormat'); }}>Curăță</Button>
-                        </div>
-                        {/* Editor */}
-                        <div
-                          ref={awbEditorRef}
-                          className="min-h-[200px] p-2 border rounded bg-background text-foreground border-input text-sm focus:outline-none"
-                          contentEditable={!sendTicketSubmitting}
-                          onInput={(e) => setAwbTicketMessage((e.target as HTMLDivElement).innerHTML)}
-                          dangerouslySetInnerHTML={{ __html: awbTicketMessage || '' }}
-                        />
-                        <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={sendTicketSubmitting || awbTicketGenerating}
-                              onClick={() => {
-                                try {
-                                  setAwbTicketGenerating(true);
-                                  const awb = awbInfo?.awb || '-';
-                                  const courier = awbInfo?.courier || 'DPD';
-                                  const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                                  const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                                  const nume = `${first} ${last}`.trim() || '-';
-                                  const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
-                                  const cur = (awbData as any)?.current_status || '-';
-                                  const html = [
-                                    `<p>Bună ziua,</p>`,
-                                    `<p>Vă rog sprijin pentru AWB <strong>${awb}</strong> (${courier}).</p>`,
-                                    `<p>Comandă: <strong>${id}</strong> • Client: <strong>${nume}</strong>.</p>`,
-                                    `<p>Status curent: <em>${cur}</em>.</p>`,
-                                    `<p>Descriere problemă: <span style="color:#666">[vă rugăm completați aici detaliile]</span>.</p>`,
-                                    `<p>Mulțumesc!</p>`
-                                  ].join('');
-                                  setAwbTicketMessage(html);
-                                } finally {
-                                  setAwbTicketGenerating(false);
-                                }
-                              }}
-                            >
-                              {awbTicketGenerating ? 'Se generează…' : 'Generează cu AI'}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={sendTicketSubmitting || awbTicketGenerating || !awbTicketMessage}
-                              onClick={() => {
-                                try {
-                                  setAwbTicketGenerating(true);
-                                  // Simulate AI correction - in a real implementation, this would call an API
-                                  setTimeout(() => {
-                                    setAwbTicketGenerating(false);
-                                  }, 500);
-                                } catch {
-                                  setAwbTicketGenerating(false);
-                                }
-                              }}
-                            >
-                              Corectează cu AI
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={sendTicketSubmitting || awbTicketGenerating || !awbTicketMessage}
-                              onClick={() => {
-                                try {
-                                  setAwbTicketGenerating(true);
-                                  // Simulate AI completion - in a real implementation, this would call an API
-                                  setTimeout(() => {
-                                    setAwbTicketGenerating(false);
-                                  }, 500);
-                                } catch {
-                                  setAwbTicketGenerating(false);
-                                }
-                              }}
-                            >
-                              Completează cu AI
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-border flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { if (!sendTicketSubmitting) { setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); } }}>Renunță</Button>
-                      <Button size="sm" onClick={() => { if (sendTicketSubmitting) return; setSendTicketSubmitting(true); setTimeout(() => { setSendTicketSubmitting(false); setShowAwbTicketModal(false); setAwbTicketMessage(""); setAwbTicketGenerating(false); }, 300); }}>
-                        {sendTicketSubmitting ? 'Se trimite…' : 'Trimite'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <AwbTicketModal
+              showAwbTicketModal={showAwbTicketModal}
+              sendTicketSubmitting={sendTicketSubmitting}
+              awbTicketMessage={awbTicketMessage}
+              awbTicketGenerating={awbTicketGenerating}
+              awbTicketTo={awbTicketTo}
+              awbTicketCc={awbTicketCc}
+              awbTicketSubject={awbTicketSubject}
+              awbEditorRef={awbEditorRef}
+              setShowAwbTicketModal={setShowAwbTicketModal}
+              setSendTicketSubmitting={setSendTicketSubmitting}
+              setAwbTicketMessage={setAwbTicketMessage}
+              setAwbTicketGenerating={setAwbTicketGenerating}
+            />
 
             {/* AWB tracking off-canvas (right, full height) */}
-            {showAwbModal && (
-              <div className="fixed inset-0 z-50">
-                {/* Backdrop */}
-                <div
-                  className="absolute inset-0 bg-black/30"
-                  onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); setShowAddWpNoteModal(false); setAddNoteOrderId(null); setShowAwbTicketModal(false); }}
-                />
-                {/* Panel */}
-                <div className="absolute right-0 top-0 h-full w-full sm:w-[720px] md:w-[780px] bg-white border-l border-border shadow-lg flex flex-col">
-                  {/* Header */}
-                  <div className="p-3 border-b border-border flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">Istoric AWB {awbInfo?.awb ? `#${awbInfo.awb}` : ''} {awbInfo?.courier ? `(${awbInfo.courier})` : ''}</div>
-                      {awbOrder && (
-                        <div className="mt-1 text-sm flex items-center gap-3 flex-wrap">
-                          <span className="font-medium truncate inline-flex items-center gap-1">
-                            {(() => {
-                              const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                              const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                              const nm = `${first} ${last}`.trim();
-                              return nm || '-';
-                            })()}
-                            {(() => {
-                              const v: any = (awbOrder as any)?.fara_factura_in_colet;
-                              const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
-                              return isGift ? (
-                                <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />
-                              ) : null;
-                            })()}
-                          </span>
-                          {(() => {
-                            const comp = (awbOrder?.billing_details?._billing_numefirma || '').trim();
-                            return comp ? (
-                              <div className="text-xs text-muted-foreground" title={comp}>
-                                Firma: <span className="font-medium text-foreground">{comp}</span>
-                              </div>
-                            ) : null;
-                          })()}
-                          {(() => {
-                            const raw = awbOrder?.billing_details?._billing_phone || awbOrder?.shipping_details?._shipping_phone || '';
-                            const display = String(raw || '').trim();
-                            const tel = display.replace(/[^+\d]/g, '');
-                            return display ? (
-                              <a href={`tel:${tel}`} className="inline-flex items-center gap-1 text-primary hover:underline" title={`Sună: ${display}`}>
-                                <PhoneCall className="w-4 h-4" />
-                                <span className="truncate">{display}</span>
-                              </a>
-                            ) : null;
-                          })()}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={() => awbOrder && window.open(`https://darurialese.com/wp-admin/post.php?post=${awbOrder.ID}&action=edit`, '_blank')}
-                            title={`Deschide comanda #${awbOrder?.ID}`}
-                          >
-                            #{awbOrder?.ID}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(() => {
-                        const courier = (awbInfo?.courier || '').toString().toLowerCase();
-                        if (courier.includes('dpd')) {
-                          return (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2"
-                              title="Trimite tichet DPD"
-                              onClick={() => { 
-                                const first = awbOrder?.billing_details?._billing_first_name || awbOrder?.shipping_details._shipping_first_name || '';
-                                const last = awbOrder?.billing_details?._billing_last_name || awbOrder?.shipping_details._shipping_last_name || '';
-                                const nm = `${first} ${last}`.trim() || '-';
-                                const id = awbOrder?.ID ? `#${awbOrder.ID}` : '';
-                                const awb = awbInfo?.awb || 'AWB';
-                                const subject = `${awb} - Problema comanda ${nm} ${id}`;
-
-                                setAwbTicketMessage(""); 
-                                setAwbTicketGenerating(false);
-                                setAwbTicketSubject(subject);
-                                setShowAwbTicketModal(true); 
-                              }}
-                            >
-                              <Send className="w-4 h-4 mr-1" />
-                              Trimite tichet
-                            </Button>
-                          );
-                        }
-                        return null;
-                      })()}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); setShowAddWpNoteModal(false); setAddNoteOrderId(null); setShowAwbTicketModal(false); }}
-                        title="Închide"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Body: split height in 2 panes with independent scroll */}
-                  <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
-                    {awbLoading ? (
-                      <div className="p-4 text-sm text-muted-foreground">Se încarcă istoricul...</div>
-                    ) : awbError ? (
-                      <div className="p-4 text-sm text-red-600">{awbError}</div>
-                    ) : awbData ? (
-                      <>
-                        {/* Wizard steps above Curier */}
-                        <div className="border border-border rounded-md p-3 bg-white">
-                          {(() => {
-                            // Derive step dates from notes
-                            const normalize = (s: any) => {
-                              try {
-                                return String(s || '')
-                                  .normalize('NFD')
-                                  .replace(/[\u0300-\u036f]/g, '')
-                                  .toLowerCase();
-                              } catch {
-                                return String(s || '').toLowerCase();
-                              }
-                            };
-                            let gotGraphicsAt: string | null = null;
-                            let approvedGraphicsAt: string | null = null;
-                            try {
-                              const notesArr = Array.isArray(awbOrder?.notes) ? (awbOrder as any).notes : [];
-                              const sortedNotes = [...notesArr];
-                              try {
-                                sortedNotes.sort((a: any, b: any) => new Date(a?.comment_date || '').getTime() - new Date(b?.comment_date || '').getTime());
-                              } catch {}
-                              for (const n of sortedNotes) {
-                                const txt = normalize(n?.comment_content);
-                                if (!gotGraphicsAt && txt.includes('starea comenzii a fost modificata') && txt.includes('din in procesare in aprobare client')) {
-                                  gotGraphicsAt = n?.comment_date || null;
-                                }
-                                if (!approvedGraphicsAt && txt.includes('din aprobare client in productie')) {
-                                  approvedGraphicsAt = n?.comment_date || null;
-                                }
-                                if (gotGraphicsAt && approvedGraphicsAt) break;
-                              }
-                            } catch {}
-                            const steps = [
-                              { key: 'order', label: 'A dat comanda', sub: awbOrder?.post_date ? formatDate(awbOrder.post_date) : null },
-                              { key: 'confirm', label: 'Confirmată comanda', sub: awbOrder?.confirmare_comanda || null },
-                              { key: 'got_graphics', label: 'A primit grafica', sub: gotGraphicsAt },
-                              { key: 'approved_graphics', label: 'A aprobat grafica', sub: approvedGraphicsAt },
-                              { key: 'picked_up', label: 'Preluat curierul', sub: (() => {
-                                try {
-                                  const td = Array.isArray(awbData?.tracking_data) ? awbData.tracking_data : [];
-                                  if (td.length === 0) return null;
-                                  const asc = [...td].sort((a: any, b: any) => new Date(a?.timestamp || '').getTime() - new Date(b?.timestamp || '').getTime());
-                                  const firstTs = asc[0]?.timestamp;
-                                  return firstTs || null;
-                                } catch { return null; }
-                              })() }
-                            ];
-                            return (
-                              <>
-                                <div className="mb-2 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                                  {awbOrder?.expediere && (
-                                    <div>
-                                      Propus pentru expediere: <span className="font-medium">{awbOrder.expediere}</span>
-                                    </div>
-                                  )}
-
-                                </div>
-                                <AwbTimeline steps={steps} proposedShippingDate={awbOrder?.expediere} />
-                              </>
-                            );
-                          })()}
-                        </div>
-                        {/* Curier (AWB tracking) pane */}
-                        <div className="flex-1 min-h-0 border border-border rounded-md flex flex-col overflow-hidden">
-                          <div className="px-3 py-2 border-b border-border bg-white sticky top-0 z-10 flex items-center justify-between">
-                            <div className="font-semibold text-sm">Curier</div>
-                            <div className="text-xs text-muted-foreground">
-                              <span className="mr-3"><span className="text-muted-foreground">Curent:</span> <span className="font-medium">{awbData.current_status || '-'}</span></span>
-                              <span className="mr-3"><span className="text-muted-foreground">Livrat:</span> <span className="font-medium">{awbData.delivered ? 'da' : 'nu'}</span></span>
-                              {awbData.courier && (<span><span className="text-muted-foreground">Curier:</span> <span className="font-medium">{awbData.courier}</span></span>)}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50">
-                            {Array.isArray(awbData.tracking_data) && awbData.tracking_data.length > 0 ? (
-                              <div className="space-y-2">
-                                {(() => {
-                                  const sorted = [...awbData.tracking_data].sort((a: any, b: any) => {
-                                    const ta = new Date(a?.timestamp || '').getTime();
-                                    const tb = new Date(b?.timestamp || '').getTime();
-                                    return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
-                                  });
-                                  return sorted.map((t: any, idx: number) => (
-                                    <div key={idx} className={`p-2 rounded-md border ${idx === 0 ? 'border-green-500 bg-green-50/40' : 'border-border'}`}>
-                                      <div className={`text-xs mb-1 ${idx === 0 ? 'text-green-700' : 'text-muted-foreground'}`}>{t.timestamp} {t.location ? `• ${t.location}` : ''}</div>
-                                      <div className={`text-sm ${idx === 0 ? 'font-bold' : 'font-medium'}`}>{t.status}</div>
-                                      {t.comment && (
-                                        <div className="text-xs whitespace-pre-wrap text-muted-foreground mt-1">{t.comment}</div>
-                                      )}
-                                    </div>
-                                  ));
-                                })()}
-                              </div>
-                            ) : (
-                              <div className="text-sm text-muted-foreground">Nu există înregistrări de tracking.</div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Notițe pane */}
-                        <div className="flex-1 min-h-0 border border-border rounded-md flex flex-col overflow-hidden">
-                          <div className="px-3 py-2 border-b border-border bg-white sticky top-0 z-10 flex items-center justify-between">
-                            <div className="font-semibold text-sm">Notițe comandă {awbOrder ? `#${awbOrder.ID}` : ''}</div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2"
-                              title="Adaugă notiță WordPress"
-                              onClick={() => { setAddWpNoteText(''); setAddWpNoteError(null); setAddWpNoteVisibleToCustomer(true); setAddNoteOrderId(awbOrder?.ID || null); setShowAddWpNoteModal(true); }}
-                            >
-                              <Plus className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-gray-50">
-                            {Array.isArray(awbOrder?.notes) && awbOrder!.notes.length > 0 ? (
-                              awbOrder!.notes.map((n, idx) => (
-                                <div key={idx} className="p-2 rounded-md border border-border">
-                                  <div className="text-xs text-muted-foreground mb-1">{n.comment_date}</div>
-                                  <div className="text-sm whitespace-pre-wrap break-words">{n.comment_content}</div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="p-4 text-sm text-muted-foreground">Selectează un AWB pentru a vedea istoricul.</div>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="p-3 border-t border-border text-right">
-                    <Button variant="outline" size="sm" onClick={() => { setShowAwbModal(false); setAwbError(null); setAwbData(null); setAwbInfo(null); setAwbOrder(null); setHighlightedOrderId(null); }}>Închide</Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Old grid disabled per new requirements */}
-            {displayedComenzi.length > 0 && false && (
-                <div
-                    className={`${desktopCols === 2
-                        ? 'md:columns-2'
-                        : desktopCols === 4
-                            ? 'md:columns-4'
-                            : 'md:columns-3'
-                    } columns-1 gap-x-6`}
-                >
-                    {displayedComenzi.map((comanda) => (
-                        <Card
-                            key={comanda.ID}
-                            className={`p-4 bg-card relative mb-6 break-inside-avoid block ${comanda.logprogravare ? 'blue-shadow-pulse' : ''}`}
-                        >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {comanda.shipping_details._shipping_first_name} {comanda.shipping_details._shipping_last_name}{" "}
-                        <a 
-                          href={`https://darurialese.com/wp-admin/post.php?post=${comanda.ID}&action=edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-500 hover:underline"
-                        >
-                          #{comanda.ID}
-                        </a>
-                      </h3>
-                    </div>
-                    <div className="flex flex-col items-end space-y-1 bg-white p-1 rounded-3xl">
-                      {comanda.ramburs === "FanCurier 0" ? (
-                        <div className="courier-card">
-                          <img src="/curieri/fan.jpg" alt="fan" className="w-10 h-6 object-contain" />
-                        </div>
-                      ) : comanda.ramburs === "FanCurier" ? (
-                        <div className="courier-card">
-                          <img src="/curieri/fan.jpg" alt="FAN Courier" className="w-10 h-6 object-contain" />
-                        </div>
-                      ) : comanda.ramburs === "DPD 0" ? (
-                        <div className="courier-card">
-                          <img src="/curieri/dpd.jpg" alt="dpd Courier" className="w-10 h-6 object-contain" />
-                        </div>
-                      ) : comanda.ramburs === "DPD" ? (
-                        <div className="courier-card">
-                          <img src="/curieri/dpd.jpg" alt="DPD" className="w-10 h-6 object-contain" />
-                        </div>
-                      ) : (
-                       <>
-                       </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Alert: Anexe diferite - ascuns conform cerinței */}
-                  {false && (() => {
-                    const ad: any = (comanda as any)?.anexe_diferite_comanda;
-                    const flag = (ad && (ad.anexe_diferite_comanda === '1' || ad.anexe_diferite_comanda === 1 || ad.anexe_diferite_comanda === true))
-                      || ad === '1' || ad === 1 || ad === true;
-                    if (!flag) return null;
-                    return (
-                      <div className="w-full mb-3">
-                        <div className="w-full rounded-md border px-3 py-2 text-xs font-medium bg-yellow-50 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700">
-                          Atentie: Anexe diferite!
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Alerte: Anexe diferite / Cantitate diferita / Atentie Pix */}
-                  {(() => {
-                    // Anexe diferite flag (existing logic)
-                    const ad: any = (comanda as any)?.anexe_diferite_comanda;
-                    const hasAnexeDiferite = (ad && (ad.anexe_diferite_comanda === '1' || ad.anexe_diferite_comanda === 1 || ad.anexe_diferite_comanda === true))
-                      || ad === '1' || ad === 1 || ad === true;
-
-                    // Cantitate diferita: any product has quantity > 1
-                    const hasCantitateDiferita = Array.isArray(comanda.produse_finale)
-                      && comanda.produse_finale.some((p: any) => {
-                        const q = typeof p?.quantity === 'string' ? parseFloat(p.quantity) : p?.quantity;
-                        return Number(q) > 1;
-                      });
-
-                    // Atenție Pix: atentie_pix = 1/true/'1'
-                    const ap: any = (comanda as any)?.atentie_pix;
-                    const hasAtentiePix = ap === '1' || ap === 1 || ap === true;
-
-                    if (!hasAnexeDiferite && !hasCantitateDiferita && !hasAtentiePix) return null;
-
-                    return (
-                      <div className="w-full mb-3">
-                        <div className=" gap-2">
-                          {hasAnexeDiferite && (
-                            <div className="mb-2 rounded-md border px-3 py-2 text-xs font-medium bg-yellow-50 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700">
-                              Atentie: Anexe diferite!
-                            </div>
-                          )}
-                          {hasCantitateDiferita && (
-                            <div className="mb-2 rounded-md border px-3 py-2 text-xs font-medium bg-yellow-50 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700">
-                              Atentie: Cantitate diferita!
-                            </div>
-                          )}
-                          {hasAtentiePix && (
-                            <div className="rounded-md border px-3 py-2 text-xs font-medium bg-yellow-50 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-700">
-                              Atentie: Pix!
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Alert: Refacut - motiv afișat când refacut = 1 */}
-                  {(() => {
-                    const rf: any = (comanda as any)?.refacut;
-                    const isRefacut = rf === '1' || rf === 1 || rf === true;
-                    const motiv = (comanda as any)?.motiv_refacut;
-                    const motivText = typeof motiv === 'string' ? motiv.trim() : '';
-                    if (!isRefacut || !motivText) return null;
-                    return (
-                      <div className="w-full mb-3">
-                        <div className="rounded-md border px-3 py-2 text-xs font-medium bg-red-50 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-200 dark:border-red-700">
-                          Motiv refăcut: {motivText}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="bg-muted/30 p-2 rounded-md mb-3">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs">
-                      <div className="flex flex-col">
-                        <span className="text-muted-foreground">Expediere</span>
-                        <span 
-                          className={`font-semibold ${
-                            selectedShippingData === formatDate(comanda.expediere).split(' ')[0].replace(',', '') 
-                              ? 'bg-blue-100 text-blue-800 px-1 rounded' 
-                              : ''
-                          }`}
-                        >
-                          {formatDate(comanda.expediere).split(' ')[0].replace(',', '')}
-                        </span>
-                      </div>
-                      <div className="flex flex-col border-l border-border pl-2">
-                        <span className="text-muted-foreground">Intrat pe</span>
-                        <span className="font-semibold">{formatDate(comanda.post_date).split(' ')[0]}</span>
-                      </div>
-                      <div className="flex flex-col border-l border-border pl-2">
-                        <span className="text-muted-foreground">Bucăți</span>
-                        <span className="font-semibold">{comanda.total_buc}</span>
-                      </div>
-                      <div className="flex flex-col border-l border-border pl-2  rounded-r">
-                        <span className="text-muted-foreground">Preț</span>
-                        <span className="font-bold">{comanda.order_total_formatted}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="md:hidden w-full flex justify-between items-center bg-muted/20 p-2 rounded-md mb-3">
-                    <span className="text-xs font-medium">Detalii</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 w-7 p-0"
-                      onClick={() => toggleSection(comanda.ID)}
-                    >
-                      {expandedSections[comanda.ID] ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Combined collapsible content - always visible on desktop, collapsible on mobile */}
-                  <div className={`${expandedSections[comanda.ID] ? 'block' : 'hidden'} md:block space-y-3`}>
-                    {/* Gravare/Print section */}
-                    <div className="flex items-center bg-muted/20 p-2 rounded-md">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-xs text-muted-foreground"><span className="md:inline hidden">Gravare:</span><span className="md:hidden inline">Grav.:</span></span>
-                        {comanda.gravare ? (
-                          <div className="w-6 h-6 bg-muted border border-border rounded-md flex items-center justify-center text-black dark:text-white">
-                            <Check className="w-4 h-4" />
-                          </div>
-                        ) : (
-                          <X className="w-3.5 h-3.5 text-gray-400" />
-                        )}
-                      </div>
-
-                      <div className="flex items-center space-x-1 ml-3">
-                        <span className="text-xs text-muted-foreground"><span className="md:inline hidden">Printare:</span><span className="md:hidden inline">Print.:</span></span>
-                        {comanda.printare ? (
-                          <div className="w-6 h-6 bg-muted border border-border rounded-md flex items-center justify-center text-black dark:text-white">
-                            <Check className="w-4 h-4" />
-                          </div>
-                        ) : (
-                          <X className="w-3.5 h-3.5 text-gray-400" />
-                        )}
-                      </div>
-
-                      <div className="ml-auto flex items-center space-x-1.5 justify-end">
-                        {/*<a */}
-                        {/*  href={`https://crm.actium.ro/api/generare-bon-debitare/${comanda.ID}`}*/}
-                        {/*  target="_blank"*/}
-                        {/*  rel="noopener noreferrer"*/}
-                        {/*  className="w-7 h-7 bg-muted hover:bg-muted/80 rounded-full flex items-center justify-center cursor-pointer"*/}
-                        {/*>*/}
-                        {/*  <Eye className="w-4 h-4 text-muted-foreground" />*/}
-                        {/*</a>*/}
-                        {/*<a */}
-                        {/*  href={`https://crm.actium.ro/api/generare-bon-debitare/${comanda.ID}`}*/}
-                        {/*  target="_blank"*/}
-                        {/*  rel="noopener noreferrer"*/}
-                        {/*  className="w-7 h-7 bg-muted hover:bg-muted/80 rounded-full flex items-center justify-center cursor-pointer"*/}
-                        {/*>*/}
-                        {/*  <Printer className="w-4 h-4 text-muted-foreground" />*/}
-                        {/*</a>*/}
-                        {comanda.previzualizare_galerie && comanda.previzualizare_galerie.length > 0 && (
-                          <div 
-                            className="w-7 h-7 bg-muted hover:bg-muted/80 rounded-full flex items-center justify-center cursor-pointer"
-                            onClick={() => {
-                              setGalleryImages(comanda.previzualizare_galerie || []);
-                              setShowGalleryModal(true);
-                            }}
-                            title="Previzualizare galerie"
-                          >
-                            <Gift className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div 
-                          className="w-7 h-7 bg-muted hover:bg-muted/80 rounded-full flex items-center justify-center cursor-pointer"
-                          onClick={() => {
-                            setCurrentOrder(comanda);
-                            setShowProblemModal(true);
-                          }}
-                        >
-                          <AlertTriangle className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Panoul inline din card a fost mutat sus, sub statusurile mari */}
-                    {null}
-
-                    {/* Product images section - grid cu maxim 6 rânduri */}
-                    <div className="grid grid-cols-6  gap-2">
-                      {comanda.produse_finale.map((produs, idx) => (
-                        <div key={idx} className="flex items-center space-x-2 bg-muted/10 rounded">
-                          <div className="relative">
-                            <img
-                              src={produs.poza ? `https://darurialese.com/wp-content/uploads/${produs.poza}` : "/api/placeholder/48/48"}
-                              alt="Product"
-                              className="w-12 h-12 object-cover rounded"
-                            />
-                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                              {produs.quantity}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {comanda.produse_finale.length === 1 && (
-                        Array.from({ length: 5 }).map((_, i) => (
-                          <div key={`ph-${i}`} className="flex items-center space-x-2">
-                            <div className="w-12 h-12 rounded bg-gray-100 dark:bg-gray-900 animate-pulse" />
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Graphic files section (grouped by Gravare and Printare; shown when logprogravare and files exist) */}
-                    {comanda.logprogravare && Array.isArray(comanda.download_fisiere_grafica) && (
-                      (() => {
-                        // Group files by type based on extension
-                        const gravareExt = ['svg', 'ai', 'dxf'];
-                        const printExt = ['eps', 'pdf']; // include pdf as print candidate if present
-
-                        const gravareFiles = comanda.download_fisiere_grafica.filter((file: any) => {
-                          if (typeof file !== 'string') return false;
-                          const fileName = file.includes('/') ? file.split('/').pop() : file;
-                          const ext = (fileName?.split('.').pop() || '').toLowerCase();
-                          return gravareExt.includes(ext);
-                        });
-
-                        const printFiles = comanda.download_fisiere_grafica.filter((file: any) => {
-                          if (typeof file !== 'string') return false;
-                          const fileName = file.includes('/') ? file.split('/').pop() : file;
-                          const ext = (fileName?.split('.').pop() || '').toLowerCase();
-                          return printExt.includes(ext);
-                        });
+            <AwbTrackingOffCanvas
+              showAwbModal={showAwbModal}
+              awbLoading={awbLoading}
+              awbError={awbError}
+              awbData={awbData}
+              awbInfo={awbInfo}
+              awbOrder={awbOrder}
+              setShowAwbModal={setShowAwbModal}
+              setAwbError={setAwbError}
+              setAwbData={setAwbData}
+              setAwbInfo={setAwbInfo}
+              setAwbOrder={setAwbOrder}
+              setHighlightedOrderId={setHighlightedOrderId}
+              setShowAddWpNoteModal={setShowAddWpNoteModal}
+              setAddNoteOrderId={setAddNoteOrderId}
+              setShowAwbTicketModal={setShowAwbTicketModal}
+              setAwbTicketMessage={setAwbTicketMessage}
+              setAwbTicketGenerating={setAwbTicketGenerating}
+              setAwbTicketSubject={setAwbTicketSubject}
+            />
 
 
-                        const renderFileChip = (file: string, colorClass: string) => {
-                          const fileName = file.includes('/') ? file.split('/').pop() || '' : file;
-                          const baseName = fileName.replace(/\.[^.]+$/, ''); // remove extension
-                          const downloadHref = `https://crm.actium.ro/api/download/${encodeToBase64(`https://darurialese.ro/wp-content/uploads/${file}`)}`;
-                          return (
-                            <a
-                              key={file}
-                              href={downloadHref}
-                              download
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`flex items-center justify-center gap-1 ${colorClass} px-2 py-2 rounded text-xs transition-colors w-full`}
-                              title={`Descarcă fișier ${fileName}`}
-                            >
-                              <span className="w-4 h-4  rounded flex items-center justify-center text-white text-xs font-bold">🡇</span>
 
-                            </a>
-                          );
-                        };
-
-                        return (
-                          <div className="bg-muted/10 p-2 rounded grid grid-cols-2 gap-2 border border-1 border-gray-300 dark:border-gray-800">
-
-                            {(() => {
-                              const gc = gravareFiles.length === 1 ? 'grid-cols-1' : gravareFiles.length === 2 ? 'grid-cols-2' : gravareFiles.length === 4 ? 'grid-cols-4' : 'grid-cols-3';
-                              return (
-                                <div className="mb-2">
-                                  <div className="text-xs font-semibold mb-1">Gravare ({gravareFiles.length})</div>
-                                  <div className={`grid gap-2 ${gc}`}>
-                                    {gravareFiles.length > 0 ? (
-                                      gravareFiles.map((f: string) => (
-                                        <div key={f} className="min-w-0">{renderFileChip(f, 'bg-gray-700')}</div>
-                                      ))
-                                    ) : (
-                                      Array.from({ length: 4 }).map((_, i) => (
-                                        <div key={`grav-sk-${i}`} className="min-w-0">
-                                          <div className="h-8  rounded  w-full" />
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {(() => {
-                              const pc = printFiles.length === 1 ? 'grid-cols-1' : printFiles.length === 2 ? 'grid-cols-2' : printFiles.length === 4 ? 'grid-cols-4' : 'grid-cols-3';
-                              return (
-                                <div>
-                                  <div className="text-xs font-semibold mb-1">Printare ({printFiles.length})</div>
-                                  <div className={`grid gap-2 ${pc}`}>
-                                    {printFiles.length > 0 ? (
-                                      printFiles.map((f: string) => (
-                                        <div key={f} className="min-w-0">{renderFileChip(f, 'bg-green-600')}</div>
-                                      ))
-                                    ) : (
-                                      Array.from({ length: 4 }).map((_, i) => (
-                                        <div key={`print-sk-${i}`} className="min-w-0">
-                                          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-full" />
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })()
-                    )}
-
-                    {/* Action buttons section */}
-                    <div>
-                      {comanda.logprogravare ? (
-                        <div className="text-xs text-muted-foreground">
-                          {/* Only show the button for production, dpd, fan, and client approval - hide for gravare and legatorie */}
-                          {(zonaActiva !== 'productie' && zonaActiva !== 'legatorie') && (
-                            <Button 
-                              className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 text-base"
-                              onClick={() => handleMutaClick(comanda.ID)}
-                              disabled={movingCommandId === comanda.ID}
-                            >
-                              {movingCommandId === comanda.ID ? (
-                                <div className="flex items-center justify-center">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Se procesează...
-                                </div>
-                              ) : (
-                                "Muta ➦"
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          {/* Only show the button for production, dpd, fan, and client approval */}
-                          {(zonaActiva === 'gravare' || zonaActiva === 'dpd' || zonaActiva === 'fan' ) && (
-                            <Button 
-                              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 text-base"
-                              onClick={() => handleIncepeDebitareClick(comanda.ID)}
-                              disabled={startingCommandId === comanda.ID}
-                            >
-                              {startingCommandId === comanda.ID ? (
-                                <div className="flex items-center justify-center">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Se procesează...
-                                </div>
-                              ) : (
-                                "Incepe procesul ➦"
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
         </div>
       </main>
 
@@ -3444,85 +2182,7 @@ export const Content = ({
         </div>
       </div>
 
-      {/* Docked Chat cu Grafica */}
-      {showChat && (
-        <div className="fixed inset-y-0 right-0 z-[80] w-[15vw]">
-          <Card className="w-full h-full shadow-lg border border-border bg-card flex flex-col overflow-hidden relative">
-            {/* Header */}
-            <div className="px-3 py-2 border-b border-border bg-secondary text-secondary-foreground flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
-                <span className="text-sm font-semibold">Chat Grafica</span>
-              </div>
-              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setShowChat(false)} aria-label="Închide chat">
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            {/* Messages */}
-            <div className="flex-1 p-3 space-y-2 overflow-y-auto bg-background/60">
-              {chatMessages.map((m, i) => (
-                <div key={i} className={`flex ${m.from === 'eu' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`${m.from === 'eu' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'} px-3 py-2 rounded-2xl max-w-[220px] text-xs shadow-sm`}>
-                    <div className="whitespace-pre-wrap break-words">{m.text}</div>
-                    <div className="text-[10px] opacity-70 mt-1 text-right">{m.time}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Input */}
-            <form
-              className="p-2 border-t border-border bg-card flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const text = chatInput.trim();
-                if (!text) return;
-                const mine = { from: 'eu' as const, text, time: nowTime() };
-                setChatMessages((prev) => [...prev, mine]);
-                setChatInput('');
-                // Fake reply from Grafica
-                setTimeout(() => {
-                  setChatMessages((prev) => [
-                    ...prev,
-                    { from: 'grafica', text: 'Am notat. Revin în 2-3 minute cu fișierul actualizat. ✅', time: nowTime() },
-                  ]);
-                }, 1200);
-              }}
-            >
-              <input
-                type="text"
-                className="flex-1 text-sm bg-background text-foreground border border-input rounded px-2 py-2 outline-none"
-                placeholder="Scrie un mesaj..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-              />
-              <Button type="submit" size="sm" className="h-9 px-3">
-                <Send className="w-4 h-4" />
-              </Button>
-            </form>
-          </Card>
-          {/* Subtle side toggle on left border */}
-          <button
-            className="absolute left-0 top-3/4 -translate-y-1/2 -translate-x-1/2 z-[81] w-9 h-9 rounded-full bg-secondary text-secondary-foreground shadow border border-border hover:opacity-90"
-            onClick={() => setShowChat(false)}
-            aria-label="Ascunde chat"
-            title="Ascunde chat"
-            type="button"
-          >
-            <MessageSquare className="w-4 h-4 m-auto" />
-          </button>
-        </div>
-      )}
-      {/* Floating toggle button (hidden when chat is open) */}
-      {/*{!showChat && (*/}
-      {/*  <Button*/}
-      {/*    className="fixed bottom-4 right-4 z-50 rounded-full h-12 w-12 p-0 shadow-lg bg-primary text-primary-foreground hover:opacity-90"*/}
-      {/*    onClick={() => setShowChat(true)}*/}
-      {/*    aria-label="Deschide chat Grafica"*/}
-      {/*    title="Chat Grafica"*/}
-      {/*  >*/}
-      {/*    <MessageSquare className="w-6 h-6" />*/}
-      {/*  </Button>*/}
-      {/*)}*/}
+
 
       {/* Problem reporting modal */}
       <ProblemDialog

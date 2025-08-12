@@ -95,6 +95,12 @@ export interface Comanda {
   expediere?: string;
   post_date?: string;
 
+  // Payment information
+  payment_method?: string; // Payment method code (e.g., 'cod', 'netopiapayments')
+  payment_method_title?: string; // Payment method display name
+  currency?: string; // Currency code (e.g., 'RON')
+  date_paid_unix?: string; // Unix timestamp of payment date
+
   total_buc?: number;
   pret_total?: string;
   order_total_formatted?: string;
@@ -122,4 +128,5 @@ export interface Comanda {
   bon_old?: boolean;
   lipsuri?: string[];
   nr?: number;
+  dificultate?: number; // Difficulty level of the order
 }
