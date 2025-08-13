@@ -93,11 +93,13 @@ export const Content = ({
   const [addNoteOrderId, setAddNoteOrderId] = useState<number | null>(null);
   // Status filter for backlines
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  // Payment method filter
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   // Confirmation modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmOrder, setConfirmOrder] = useState<Comanda | null>(null);
   const [activeAddressTab, setActiveAddressTab] = useState<'shipping' | 'billing'>('shipping');
-  const [activeConfirmTab, setActiveConfirmTab] = useState<'confirmare' | 'sms' | 'puncte' | 'persoane'>('confirmare');
+  const [activeConfirmTab, setActiveConfirmTab] = useState<'confirmare' | 'puncte' | 'persoane'>('confirmare');
   // AWB tracking modal state
   const [showAwbModal, setShowAwbModal] = useState(false);
   const [awbLoading, setAwbLoading] = useState(false);
@@ -304,6 +306,11 @@ export const Content = ({
       filtered = filtered.filter(comanda => comanda.post_status === selectedStatus);
     }
 
+    // Filter by payment method
+    if (selectedPaymentMethod) {
+      filtered = filtered.filter(comanda => comanda.payment_method_title === selectedPaymentMethod);
+    }
+
     // Filter by tip grafica (gravare/printare/all)
     if (filterTipGrafica === 'gravare') {
       filtered = filtered.filter(comanda => !!comanda.gravare);
@@ -338,7 +345,7 @@ export const Content = ({
     }
 
     return filtered;
-  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica, zonaActiva, selectedStatus]);
+  }, [comenzi, selectedProductId, selectedShippingData, searchTerm, formatDate, movingCommandId, filterTipGrafica, zonaActiva, selectedStatus, selectedPaymentMethod]);
 
 
   // Extract unique shipping dates
@@ -369,6 +376,22 @@ export const Content = ({
       .sort((a, b) => b.count - a.count); // Sort by count descending
   }, [comenzi, zonaActiva]);
 
+  // Extract unique payment methods with counts
+  const paymentMethodsWithCounts = React.useMemo(() => {
+    const paymentMethodMap = new Map<string, number>();
+
+    // Count occurrences of each payment method
+    comenzi.forEach(comanda => {
+      const paymentMethod = comanda.payment_method_title || 'Necunoscut';
+      paymentMethodMap.set(paymentMethod, (paymentMethodMap.get(paymentMethod) || 0) + 1);
+    });
+
+    // Convert to array of objects
+    return Array.from(paymentMethodMap.entries())
+      .map(([paymentMethod, count]) => ({ paymentMethod, count }))
+      .sort((a, b) => b.count - a.count); // Sort by count descending
+  }, [comenzi]);
+
   // Keyboard navigation for gallery (left/right)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -392,6 +415,7 @@ export const Content = ({
     setMovingCommandId(null);
     setStartingCommandId(null);
     setSelectedStatus(null);
+    setSelectedPaymentMethod(null);
   }, [zonaActiva]);
 
   // Init desktop cols from localStorage and listen for changes from Header
@@ -1458,6 +1482,38 @@ export const Content = ({
             </div>
           )}
 
+          {/* Payment method filters */}
+          {paymentMethodsWithCounts.length > 0 && (
+            <div className="mt-2 p-2 border border-border rounded-md bg-white">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium text-muted-foreground">Filtrează după metodă de plată:</span>
+                {selectedPaymentMethod && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setSelectedPaymentMethod(null)}
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    Resetează filtrul
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {paymentMethodsWithCounts.map(({ paymentMethod, count }) => (
+                  <Badge
+                    key={paymentMethod}
+                    variant={selectedPaymentMethod === paymentMethod ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedPaymentMethod(selectedPaymentMethod === paymentMethod ? null : paymentMethod)}
+                  >
+                    {paymentMethod} ({count})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Orders table (replaces old grid) */}
             {displayedComenzi.length > 0 && (
               <div className="overflow-x-auto">
@@ -1475,6 +1531,7 @@ export const Content = ({
                       )}
                       <TableHead>Nume</TableHead>
                       <TableHead>Data comandă</TableHead>
+                      <TableHead>Metodă plată</TableHead>
                       {zonaActiva === 'precomanda' && (
                         <>
                           <TableHead>Data expediere</TableHead>
@@ -1515,11 +1572,22 @@ export const Content = ({
                       const daysUntilExp = daysUntil(expStr);
                       const isPreOneDay = zonaActiva === 'precomanda' && daysUntilExp === 1;
                       const isPreToday = zonaActiva === 'precomanda' && daysUntilExp === 0;
-                      const motivesObj: any = (c as any).motive_comanda_neconfirmata || {};
-                      const motivesActiveCount = Object.keys(motivesObj || {}).filter((k) => {
-                        const v = motivesObj[k]?.meta_value;
-                        return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
-                      }).length;
+                      const motivesData: any = (c as any).motive_comanda_neconfirmata;
+                      let motivesActiveCount = 0;
+
+                      if (motivesData) {
+                        // Check if it's the new structure with count and motives array
+                        if ('count' in motivesData && 'motives' in motivesData) {
+                          motivesActiveCount = motivesData.motives?.length || 0;
+                        } else {
+                          // Old structure - count active motives
+                          const motivesObj = motivesData || {};
+                          motivesActiveCount = Object.keys(motivesObj).filter((k) => {
+                            const v = motivesObj[k]?.meta_value;
+                            return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                          }).length;
+                        }
+                      }
                       const totalCols = isBacklines ? 7 : 6;
                       return (
                         <TableRow key={`${c.ID}-main`} className={`${(highlightedOrderId === c.ID || isTaskChecked(c.ID) || isPreOneDay) ? 'bg-green-100' : ''}`}>
@@ -1676,6 +1744,7 @@ export const Content = ({
                             })()}
                           </TableCell>
                           <TableCell>{rawDate ? formatDate(rawDate) : '-'}</TableCell>
+                          <TableCell>{c.payment_method_title || '-'}</TableCell>
                           {zonaActiva === 'precomanda' && (
                             <>
                               <TableCell>{(c.expediere && String(c.expediere).trim()) || '-'}</TableCell>
@@ -1811,15 +1880,31 @@ export const Content = ({
                           {zonaActiva === 'neconfirmate' && (
                             <TableCell>
                               {(() => {
-                                const motives = (c as any).motive_comanda_neconfirmata || {};
-                                const ids = Object.keys(motives || {});
-                                const activeCount = ids.filter((k) => {
-                                  const v = motives[k]?.meta_value;
-                                  return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
-                                }).length;
+                                const motivesData = (c as any).motive_comanda_neconfirmata;
+                                let activeCount = 0;
+                                let motiveTitles: string[] = [];
+
+                                if (motivesData) {
+                                  // Check if it's the new structure with count and motives array
+                                  if ('count' in motivesData && 'motives' in motivesData) {
+                                    const motives = motivesData.motives || [];
+                                    activeCount = motives.length;
+                                    motiveTitles = motives.map((m: any) => m.motiv_neconfirmare || '');
+                                  } else {
+                                    // Old structure - count active motives
+                                    const motivesObj = motivesData || {};
+                                    const ids = Object.keys(motivesObj);
+                                    activeCount = ids.filter((k) => {
+                                      const v = motivesObj[k]?.meta_value;
+                                      return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                                    }).length;
+                                    motiveTitles = ids.map(k => motivesObj[k]?.meta_key?.replace('_motive_comanda_neconfirmata_', '') || k);
+                                  }
+                                }
+
                                 const checked = Math.min(3, activeCount);
                                 return (
-                                  <div className="flex items-center gap-2" title={ids.length ? `Motive: ${ids.join(', ')}` : 'Fără motive'}>
+                                  <div className="flex items-center gap-2" title={motiveTitles.length ? `Motive: ${motiveTitles.join(', ')}` : 'Fără motive'}>
                                     {[0,1,2].map((i) => (
                                       <input key={i} type="checkbox" className="h-4 w-4" checked={i < checked} readOnly />
                                     ))}

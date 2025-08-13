@@ -51,14 +51,21 @@ export interface Produs {
 }
 
 export interface OrderNote {
+  comment_ID?: number; // Comment ID for deletion
   comment_content: string;
   comment_date: string;
 }
 
 // Unified order type used across the UI
 export interface Comanda {
-  // Reasons for unconfirmed order (API: motive_comanda_neconfirmata). Keys are IDs, values include meta_value '1' when active.
-  motive_comanda_neconfirmata?: Record<string, { meta_id?: number; post_id?: number; meta_key?: string; meta_value?: string | number | boolean }>;
+  // Reasons for unconfirmed order (API: motive_comanda_neconfirmata). New structure with count and motives array.
+  motive_comanda_neconfirmata?: {
+    count?: string | number;
+    motives?: Array<{
+      motiv_neconfirmare: string;
+      data_si_ora: string;
+    }>;
+  } | Record<string, { meta_id?: number; post_id?: number; meta_key?: string; meta_value?: string | number | boolean }>; // Support both old and new structure
   ID: number;
   id_comanda?: string; // convenience string id for UI
   data_comanda?: string; // convenience date/time for UI

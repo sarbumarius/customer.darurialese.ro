@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,12 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { GooglePlacesAutocomplete } from "@/components/ui/google-places-autocomplete";
+import { LoadScript, GoogleMap, Marker } from "@react-google-maps/api";
 import StatusBadgesRow from "@/components/content/StatusBadgesRow";
 import ToggleOptionsGrid from "@/components/content/ToggleOptionsGrid";
 import ConfirmationSelects from "@/components/content/ConfirmationSelects";
 import ProductPersonalizationCard from "@/components/content/ProductPersonalizationCard";
 import GiftsSlider from "@/components/content/GiftsSlider";
-import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye } from "lucide-react";
+import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info } from "lucide-react";
 import type { Comanda } from "@/types/dashboard";
 
 // Interface for SMS message
@@ -25,6 +27,11 @@ interface SmsMessage {
   created_at: string;
   updated_at: string;
 }
+
+// Map configuration
+const mapContainerStyle = { width: "100%", height: "300px", borderRadius: "0.5rem" };
+const defaultCenter = { lat: 44.4268, lng: 26.1025 }; // București
+const libraries: ("places")[] = ["places"];
 
 // Client Orders Modal Component
 const ClientOrdersModal = ({ 
@@ -118,8 +125,8 @@ export interface ConfirmOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   confirmOrder: Comanda | null;
-  activeConfirmTab: 'confirmare' | 'sms' | 'puncte' | 'persoane';
-  setActiveConfirmTab: (t: 'confirmare' | 'sms' | 'puncte' | 'persoane') => void;
+  activeConfirmTab: 'confirmare' | 'puncte' | 'persoane';
+  setActiveConfirmTab: (t: 'confirmare' | 'puncte' | 'persoane') => void;
   activeAddressTab: 'shipping' | 'billing';
   setActiveAddressTab: (t: 'shipping' | 'billing') => void;
 }
@@ -133,9 +140,13 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   activeAddressTab,
   setActiveAddressTab,
 }) => {
-  console.log("ConfirmOrderDialog rendered with activeConfirmTab:", activeConfirmTab);
+  // console.log("ConfirmOrderDialog rendered with activeConfirmTab:", activeConfirmTab);
   // State for the note textarea
   const [noteText, setNoteText] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteSuccess, setNoteSuccess] = useState<string | null>(null);
+  const [deletingNote, setDeletingNote] = useState<number | null>(null);
 
   // State for the verify payment modal
   const [showVerifyPaymentModal, setShowVerifyPaymentModal] = useState(false);
@@ -144,13 +155,544 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   const [showClientOrdersModal, setShowClientOrdersModal] = useState(false);
 
   // State for the top tabs
-  const [activeTopTab, setActiveTopTab] = useState<'tab1' | 'tab2' | 'tab3' | 'tab4'>('tab1');
+  const [activeTopTab, setActiveTopTab] = useState<'tab1' | 'tab3' | 'tab4'>('tab1');
+
+  // State for the notes tabs
+  const [activeNotesTab, setActiveNotesTab] = useState<'notite' | 'sms'>('notite');
 
   // State for SMS messages
   const [smsMessages, setSmsMessages] = useState<SmsMessage[]>([]);
   const [loadingSms, setLoadingSms] = useState(false);
   const [smsError, setSmsError] = useState<string | null>(null);
   const [smsText, setSmsText] = useState("");
+  const [selectedSmsPhone, setSelectedSmsPhone] = useState<string>("");
+
+  // State for motiv neconfirmare
+  const [selectedReason, setSelectedReason] = useState<string>("Clientul nu raspunde");
+  const [addingMotive, setAddingMotive] = useState(false);
+  const [deletingMotive, setDeletingMotive] = useState<number | null>(null);
+  const [motiveError, setMotiveError] = useState<string | null>(null);
+  const [motiveSuccess, setMotiveSuccess] = useState<string | null>(null);
+
+  // Local state for motives list (for immediate visual updates)
+  const [localMotives, setLocalMotives] = useState<Array<{
+    motiv_neconfirmare: string;
+    data_si_ora: string;
+  }>>([]);
+
+  // Local state for notes list (for immediate visual updates)
+  const [localNotes, setLocalNotes] = useState<Array<{
+    comment_content: string;
+    comment_date: string;
+    comment_ID: number;
+  }>>([]);
+
+  // State for difficulty level
+  const [difficulty, setDifficulty] = useState<string>("1");
+
+  // State for client mood
+  const [clientMood, setClientMood] = useState<string>("");
+
+  // State for loading status of API calls
+  const [loadingField, setLoadingField] = useState<string | null>(null);
+
+  // State for visual field values to update after API calls
+  const [shippingState, setShippingState] = useState<string>("");
+  const [shippingCity, setShippingCity] = useState<string>("");
+  const [shippingPostalCode, setShippingPostalCode] = useState<string>("");
+  const [billingState, setBillingState] = useState<string>("");
+  const [billingCity, setBillingCity] = useState<string>("");
+  const [billingPostalCode, setBillingPostalCode] = useState<string>("");
+
+  // State for map location
+  const [mapLocation, setMapLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+
+  // State for FanCourier additional kilometers check
+  const [fanCourierKmCheck, setFanCourierKmCheck] = useState<{
+    hasAdditionalKm: boolean;
+    kmValue: string;
+    locality: string;
+    county: string;
+    checked: boolean;
+  } | null>(null);
+
+  // State for SameDay additional kilometers check
+  const [samedayKmCheck, setSamedayKmCheck] = useState<{
+    hasAdditionalKm: boolean;
+    kmValue: string;
+    locality: string;
+    county: string;
+    checked: boolean;
+  } | null>(null);
+
+  // Refs for accessing the GooglePlacesAutocomplete values
+  const shippingAddressRef = useRef<{ getValue: () => string }>(null);
+  const billingAddressRef = useRef<{ getValue: () => string }>(null);
+
+  // Function to compare shipping and billing addresses and get differences
+  const getAddressDifferences = () => {
+    if (!confirmOrder) return null;
+
+    const shipping = confirmOrder.shipping_details;
+    const billing = confirmOrder.billing_details;
+
+    const differences: string[] = [];
+
+    // Compare first name
+    const shippingFirstName = shipping?._shipping_first_name || "";
+    const billingFirstName = billing?._billing_first_name || "";
+    if (shippingFirstName !== billingFirstName) {
+      differences.push(`Nume: "${shippingFirstName}" vs "${billingFirstName}"`);
+    }
+
+    // Compare last name
+    const shippingLastName = shipping?._shipping_last_name || "";
+    const billingLastName = billing?._billing_last_name || "";
+    if (shippingLastName !== billingLastName) {
+      differences.push(`Prenume: "${shippingLastName}" vs "${billingLastName}"`);
+    }
+
+    // Compare phone (shipping uses billing phone, so we compare with billing phone)
+    const shippingPhone = billing?._billing_phone || "";
+    const billingPhone = billing?._billing_phone || "";
+    // Phone is typically the same, so we don't compare it
+
+    // Compare address 1
+    const shippingAddress1 = shipping?._shipping_address_1 || "";
+    const billingAddress1 = billing?._billing_address_1 || "";
+    if (shippingAddress1 !== billingAddress1) {
+      differences.push(`Adresă: "${shippingAddress1}" vs "${billingAddress1}"`);
+    }
+
+    // Compare address 2
+    const shippingAddress2 = shipping?._shipping_address_2 || "";
+    const billingAddress2 = billing?._billing_address_2 || "";
+    if (shippingAddress2 !== billingAddress2) {
+      differences.push(`Detalii adresă: "${shippingAddress2}" vs "${billingAddress2}"`);
+    }
+
+    // Compare state (county)
+    const shippingStateValue = shippingState || shipping?._shipping_state || "";
+    const billingStateValue = billingState || billing?._billing_state || "";
+    if (shippingStateValue !== billingStateValue) {
+      differences.push(`Județ: "${shippingStateValue}" vs "${billingStateValue}"`);
+    }
+
+    // Compare city
+    const shippingCityValue = shippingCity || shipping?._shipping_city || "";
+    const billingCityValue = billingCity || billing?._billing_city || "";
+    if (shippingCityValue !== billingCityValue) {
+      differences.push(`Localitate: "${shippingCityValue}" vs "${billingCityValue}"`);
+    }
+
+    // Compare postal code
+    const shippingPostalCodeValue = shippingPostalCode || shipping?._shipping_postcode || "";
+    const billingPostalCodeValue = billingPostalCode || billing?._billing_postcode || "";
+    if (shippingPostalCodeValue !== billingPostalCodeValue) {
+      differences.push(`Cod poștal: "${shippingPostalCodeValue}" vs "${billingPostalCodeValue}"`);
+    }
+
+    return differences.length > 0 ? differences : null;
+  };
+
+  // State for tooltip visibility
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  // State for payment method
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("");
+  const [loadingPaymentMethod, setLoadingPaymentMethod] = useState(false);
+
+  // Utility function to normalize names for FanCourier matching
+  const normalizeNameForMatching = (name: string): string => {
+    if (!name) return "";
+
+    // Remove "County" suffix (case insensitive)
+    let normalized = name.replace(/\s+county$/i, "").trim();
+
+    // Remove "Județul " prefix (case insensitive)
+    normalized = normalized.replace(/^județul\s+/i, "");
+
+    // Remove diacritics
+    const diacriticsMap: { [key: string]: string } = {
+      'ă': 'a', 'Ă': 'A',
+      'â': 'a', 'Â': 'A', 
+      'î': 'i', 'Î': 'I',
+      'ș': 's', 'Ș': 'S',
+      'ț': 't', 'Ț': 'T'
+    };
+
+    normalized = normalized.replace(/[ăâîșțĂÂÎȘȚ]/g, (match) => diacriticsMap[match] || match);
+
+    return normalized.toLowerCase().trim();
+  };
+
+  // Function to check FanCourier additional kilometers
+  const checkFanCourierAdditionalKm = async (county: string, locality: string) => {
+    try {
+      console.log(`🚚 Verific km suplimentari FanCourier pentru: ${locality}, ${county}`);
+
+      // Normalize input values for matching
+      const normalizedLocality = normalizeNameForMatching(locality);
+      const normalizedCounty = normalizeNameForMatching(county);
+
+      console.log(`🚚 Valori normalizate pentru căutare: ${normalizedLocality}, ${normalizedCounty}`);
+
+      // Fetch the CSV file
+      const response = await fetch('/liste/km-fan-suplimentari.csv');
+      if (!response.ok) {
+        throw new Error('Failed to fetch CSV file');
+      }
+
+      const csvText = await response.text();
+      const lines = csvText.split('\n');
+
+      // Skip header line and process data
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Parse CSV line (handle quoted values)
+        const matches = line.match(/("([^"]*)"|[^",]+)/g);
+        if (!matches || matches.length < 4) continue;
+
+        const csvLocalitate = matches[0].replace(/"/g, '').trim();
+        const csvJudet = matches[1].replace(/"/g, '').trim();
+        const csvAgentie = matches[2].replace(/"/g, '').trim();
+        const csvKm = matches[3].replace(/"/g, '').trim();
+
+        // Normalize CSV values for matching
+        const normalizedCsvLocalitate = normalizeNameForMatching(csvLocalitate);
+        const normalizedCsvJudet = normalizeNameForMatching(csvJudet);
+
+        // Check for match (normalized comparison)
+        if (normalizedCsvLocalitate === normalizedLocality && 
+            normalizedCsvJudet === normalizedCounty) {
+
+          const hasAdditionalKm = csvKm !== "" && csvKm !== "0";
+
+          console.log(`🚚 Găsit în CSV: ${csvLocalitate}, ${csvJudet}, Agenție: ${csvAgentie}, KM: "${csvKm}"`);
+          console.log(`🚚 Match găsit cu valorile normalizate: "${normalizedCsvLocalitate}" === "${normalizedLocality}" și "${normalizedCsvJudet}" === "${normalizedCounty}"`);
+
+          setFanCourierKmCheck({
+            hasAdditionalKm,
+            kmValue: csvKm,
+            locality: csvLocalitate,
+            county: csvJudet,
+            checked: true
+          });
+
+          return;
+        }
+      }
+
+      // No match found
+      console.log(`🚚 Nu s-a găsit în CSV: ${locality}, ${county}`);
+      console.log(`🚚 Căutat cu valorile normalizate: ${normalizedLocality}, ${normalizedCounty}`);
+      setFanCourierKmCheck({
+        hasAdditionalKm: false,
+        kmValue: "",
+        locality,
+        county,
+        checked: true
+      });
+
+    } catch (error) {
+      console.error('Error checking FanCourier additional km:', error);
+      setFanCourierKmCheck({
+        hasAdditionalKm: false,
+        kmValue: "",
+        locality,
+        county,
+        checked: true
+      });
+    }
+  };
+
+  // Function to check SameDay additional kilometers
+  const checkSamedayAdditionalKm = async (county: string, locality: string) => {
+    try {
+      console.log(`📦 Verific km suplimentari SameDay pentru: ${locality}, ${county}`);
+
+      // Normalize input values for matching
+      const normalizedLocality = normalizeNameForMatching(locality);
+      const normalizedCounty = normalizeNameForMatching(county);
+
+      console.log(`📦 Valori normalizate pentru căutare: ${normalizedLocality}, ${normalizedCounty}`);
+
+      // Fetch the CSV file
+      const response = await fetch('/liste/km-sameday-suplimentari.csv');
+      if (!response.ok) {
+        throw new Error('Failed to fetch SameDay CSV file');
+      }
+
+      const csvText = await response.text();
+      const lines = csvText.split('\n');
+
+      // Skip header line and process data
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Parse CSV line (SameDay CSV doesn't have quotes, comma-separated)
+        const columns = line.split(',');
+        if (columns.length < 4) continue;
+
+        const csvLocalitate = columns[0].trim();
+        const csvJudet = columns[1].trim();
+        const csvComuna = columns[2].trim();
+        const csvKm = columns[3].trim();
+
+        // Normalize CSV values for matching
+        const normalizedCsvLocalitate = normalizeNameForMatching(csvLocalitate);
+        const normalizedCsvJudet = normalizeNameForMatching(csvJudet);
+
+        // Check for match (normalized comparison)
+        if (normalizedCsvLocalitate === normalizedLocality && 
+            normalizedCsvJudet === normalizedCounty) {
+
+          const hasAdditionalKm = csvKm !== "" && csvKm !== "0";
+
+          console.log(`📦 Găsit în CSV: ${csvLocalitate}, ${csvJudet}, Comuna: ${csvComuna}, KM: "${csvKm}"`);
+          console.log(`📦 Match găsit cu valorile normalizate: "${normalizedCsvLocalitate}" === "${normalizedLocality}" și "${normalizedCsvJudet}" === "${normalizedCounty}"`);
+
+          setSamedayKmCheck({
+            hasAdditionalKm,
+            kmValue: csvKm,
+            locality: csvLocalitate,
+            county: csvJudet,
+            checked: true
+          });
+
+          return;
+        }
+      }
+
+      // No match found
+      console.log(`📦 Nu s-a găsit în CSV: ${locality}, ${county}`);
+      console.log(`📦 Căutat cu valorile normalizate: ${normalizedLocality}, ${normalizedCounty}`);
+      setSamedayKmCheck({
+        hasAdditionalKm: false,
+        kmValue: "",
+        locality,
+        county,
+        checked: true
+      });
+
+    } catch (error) {
+      console.error('Error checking SameDay additional km:', error);
+      setSamedayKmCheck({
+        hasAdditionalKm: false,
+        kmValue: "",
+        locality,
+        county,
+        checked: true
+      });
+    }
+  };
+
+  // Generic function to handle changes to shipping details
+  const handleShippingDetailChange = async (field: string, value: string) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    const loadingKey = `shipping_${field}`;
+    setLoadingField(loadingKey);
+
+    try {
+      const response = await fetch(`https://crm.actium.ro/api/change/shipping/${field}/${confirmOrder.ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ value }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      if (field === 'state') {
+        console.log(`🏛️ Județ pentru livrare trimis cu succes: "${value}" către API: https://crm.actium.ro/api/change/shipping/state/${confirmOrder.ID}`);
+        setShippingState(value); // Update visual state
+      } else if (field === 'city') {
+        console.log(`Shipping ${field} updated successfully to ${value}`);
+        setShippingCity(value); // Update visual state
+      } else if (field === 'postcode') {
+        console.log(`Shipping ${field} updated successfully to ${value}`);
+        setShippingPostalCode(value); // Update visual state
+      } else {
+        console.log(`Shipping ${field} updated successfully to ${value}`);
+      }
+    } catch (error) {
+      console.error(`Error updating shipping ${field}:`, error);
+    } finally {
+      setLoadingField(null);
+    }
+  };
+
+  // Generic function to handle changes to billing details
+  const handleBillingDetailChange = async (field: string, value: string) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    const loadingKey = `billing_${field}`;
+    setLoadingField(loadingKey);
+
+    try {
+      const response = await fetch(`https://crm.actium.ro/api/change/billing/${field}/${confirmOrder.ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ value }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      if (field === 'state') {
+        console.log(`🏛️ Județ pentru facturare trimis cu succes: "${value}" către API: https://crm.actium.ro/api/change/billing/state/${confirmOrder.ID}`);
+        setBillingState(value); // Update visual state
+      } else if (field === 'city') {
+        console.log(`Billing ${field} updated successfully to ${value}`);
+        setBillingCity(value); // Update visual state
+      } else if (field === 'postcode') {
+        console.log(`Billing ${field} updated successfully to ${value}`);
+        setBillingPostalCode(value); // Update visual state
+      } else {
+        console.log(`Billing ${field} updated successfully to ${value}`);
+      }
+    } catch (error) {
+      console.error(`Error updating billing ${field}:`, error);
+    } finally {
+      setLoadingField(null);
+    }
+  };
+
+  // Function to copy shipping data to billing
+  const copyShippingToBilling = async () => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    console.log('🔄 Copiez datele de livrare la facturare...');
+
+    try {
+      // Get current shipping values
+      const shippingData = {
+        first_name: confirmOrder.shipping_details?._shipping_first_name || "",
+        last_name: confirmOrder.shipping_details?._shipping_last_name || "",
+        phone: confirmOrder.billing_details?._billing_phone || "", // Phone is usually from billing
+        address_1: shippingAddressRef.current?.getValue() || confirmOrder.shipping_details?._shipping_address_1 || "",
+        address_2: confirmOrder.shipping_details?._shipping_address_2 || "",
+        state: shippingState || confirmOrder.shipping_details?._shipping_state || "",
+        city: shippingCity || confirmOrder.shipping_details?._shipping_city || "",
+        postcode: shippingPostalCode || confirmOrder.shipping_details?._shipping_postcode || ""
+      };
+
+      console.log('📋 Date de copiat:', shippingData);
+
+      // Copy each field to billing using the API
+      const copyPromises = [];
+
+      if (shippingData.first_name !== undefined) {
+        copyPromises.push(handleBillingDetailChange("first_name", shippingData.first_name));
+      }
+      if (shippingData.last_name !== undefined) {
+        copyPromises.push(handleBillingDetailChange("last_name", shippingData.last_name));
+      }
+      if (shippingData.phone !== undefined) {
+        copyPromises.push(handleBillingDetailChange("phone", shippingData.phone));
+      }
+      if (shippingData.address_1 !== undefined) {
+        copyPromises.push(handleBillingDetailChange("address_1", shippingData.address_1));
+      }
+      if (shippingData.address_2 !== undefined) {
+        copyPromises.push(handleBillingDetailChange("address_2", shippingData.address_2));
+      }
+      if (shippingData.state !== undefined) {
+        copyPromises.push(handleBillingDetailChange("state", shippingData.state));
+      }
+      if (shippingData.city !== undefined) {
+        copyPromises.push(handleBillingDetailChange("city", shippingData.city));
+      }
+      if (shippingData.postcode !== undefined) {
+        copyPromises.push(handleBillingDetailChange("postcode", shippingData.postcode));
+      }
+
+      // Wait for all API calls to complete
+      await Promise.all(copyPromises);
+
+      console.log('✅ Datele au fost copiate cu succes de la livrare la facturare!');
+
+      // Switch to billing tab to show the copied data
+      setActiveAddressTab('billing');
+
+    } catch (error) {
+      console.error('❌ Eroare la copierea datelor:', error);
+    }
+  };
+
+  // Function to handle payment method changes and call API
+  const handlePaymentMethodChange = async (paymentMethodTitle: string) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    // Map payment method titles to API method values
+    const methodMapping: { [key: string]: string } = {
+      'Plata ramburs': 'cod',
+      'Transfer bancar direct': 'bacs',
+      'Plata cu cardul Mobilpay': 'netopiapayments'
+    };
+
+    const apiMethod = methodMapping[paymentMethodTitle];
+    if (!apiMethod) {
+      console.error('Invalid payment method:', paymentMethodTitle);
+      return;
+    }
+
+    setLoadingPaymentMethod(true);
+
+    try {
+      console.log(`💳 Schimb metoda de plată la "${paymentMethodTitle}" (${apiMethod}) pentru comanda ${confirmOrder.ID}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/change-metoda-plata/${confirmOrder.ID}/${apiMethod}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Metoda de plată actualizată cu succes:', data);
+
+      // Update local state
+      setSelectedPaymentMethod(paymentMethodTitle);
+
+      // Optionally show success message or update UI
+      if (data.success) {
+        console.log(`💳 ${data.message}`);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la actualizarea metodei de plată:', error);
+      // Optionally show error message to user
+    } finally {
+      setLoadingPaymentMethod(false);
+    }
+  };
 
   // Function to fetch SMS messages
   const fetchSmsMessages = async (phoneNumber: string) => {
@@ -238,7 +780,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
       return;
     }
 
-    const phoneNumber = confirmOrder?.billing_details?._billing_phone || "";
+    const phoneNumber = selectedSmsPhone;
 
     if (!phoneNumber) {
       setSmsError("Număr de telefon lipsă");
@@ -251,16 +793,23 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     try {
       console.log("Sending SMS to", phoneNumber, "with message:", smsText);
 
-      // Make the actual API call to send SMS
-      const response = await fetch('https://crm.actium.ro/api/send-sms', {
+      // Clean phone number - remove +4 prefix if present
+      const cleanPhoneNumber = phoneNumber.replace(/^\+4/, '');
+
+      // Make the actual API call to send SMS using the new endpoint
+      const response = await fetch('https://crm.actium.ro/api/sendsmsonline', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({
-          phone: phoneNumber,
-          message: smsText,
+        body: new URLSearchParams({
+          smsto: encodeURIComponent(cleanPhoneNumber),
+          smsbody: encodeURIComponent(smsText),
+          smstype: 'sms',
+          token: 'Q6^G08236WyWU$DCjMO!$4llPyLC6yBpFl',
+          category: 'manual',
+          tip: 'trimis'
         }),
       });
 
@@ -294,17 +843,422 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     }
   };
 
+  // Function to add a new motiv neconfirmare
+  const addMotivNeconfirmare = async () => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      setMotiveError('ID comandă lipsă');
+      return;
+    }
+
+    if (!selectedReason || selectedReason === "Selecteaza") {
+      setMotiveError('Vă rugăm să selectați un motiv');
+      return;
+    }
+
+    setAddingMotive(true);
+    setMotiveError(null);
+    setMotiveSuccess(null);
+
+    try {
+      console.log(`📝 Adaug motiv neconfirmare: "${selectedReason}" pentru comanda ${confirmOrder.ID}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/add-motiv-neconfirmare/${confirmOrder.ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          motiv_neconfirmare: selectedReason
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Motiv neconfirmare adăugat cu succes:', data);
+
+      if (data.success) {
+        console.log(`📝 ${data.message}`);
+        setMotiveSuccess('Motivul a fost adăugat cu succes');
+
+        // Update the local motives state for immediate visual feedback
+        if (data.data) {
+          const newMotive = {
+            motiv_neconfirmare: data.data.motiv_neconfirmare,
+            data_si_ora: data.data.data_si_ora
+          };
+
+          // Add the new motive to the local state
+          setLocalMotives(prevMotives => [...prevMotives, newMotive]);
+        }
+
+        // Clear success message after 3 seconds
+        setTimeout(() => setMotiveSuccess(null), 3000);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la adăugarea motivului de neconfirmare:', error);
+      setMotiveError(`Eroare la adăugarea motivului: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setAddingMotive(false);
+    }
+  };
+
+  // Function to delete a motiv neconfirmare
+  const deleteMotivNeconfirmare = async (index: number) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      setMotiveError('ID comandă lipsă');
+      return;
+    }
+
+    setDeletingMotive(index);
+    setMotiveError(null);
+    setMotiveSuccess(null);
+
+    try {
+      console.log(`🗑️ Șterg motiv neconfirmare cu indexul ${index} pentru comanda ${confirmOrder.ID}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/delete-motiv-neconfirmare/${confirmOrder.ID}/${index}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Motiv neconfirmare șters cu succes:', data);
+
+      if (data.success) {
+        console.log(`🗑️ ${data.message}`);
+        setMotiveSuccess('Motivul a fost șters cu succes');
+
+        // Update the local motives state for immediate visual feedback
+        setLocalMotives(prevMotives => prevMotives.filter((_, i) => i !== index));
+
+        // Clear success message after 3 seconds
+        setTimeout(() => setMotiveSuccess(null), 3000);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la ștergerea motivului de neconfirmare:', error);
+      setMotiveError(`Eroare la ștergerea motivului: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setDeletingMotive(null);
+    }
+  };
+
+  // Function to add a new note
+  const addNote = async () => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      setNoteError('ID comandă lipsă');
+      return;
+    }
+
+    if (!noteText.trim()) {
+      setNoteError('Notița nu poate fi goală');
+      return;
+    }
+
+    setAddingNote(true);
+    setNoteError(null);
+    setNoteSuccess(null);
+
+    try {
+      console.log(`📝 Adaug notița: "${noteText}" pentru comanda ${confirmOrder.ID}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/adauga-notita/${confirmOrder.ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          note: noteText.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Notița adăugată cu succes:', data);
+
+      if (data.success) {
+        console.log(`📝 ${data.message}`);
+        setNoteSuccess('Notița a fost adăugată cu succes');
+
+        // Add the new note to the local notes list for immediate visual feedback
+        const newNote = {
+          comment_content: noteText.trim(),
+          comment_date: new Date().toISOString()
+        };
+
+        // Add the new note to the beginning of the local notes array
+        setLocalNotes(prevNotes => [newNote, ...prevNotes]);
+
+        // Clear the note text and success message
+        setNoteText('');
+        setTimeout(() => setNoteSuccess(null), 3000);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la adăugarea notiței:', error);
+      setNoteError(`Eroare la adăugarea notiței: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setAddingNote(false);
+    }
+  };
+
+  // Function to delete a note
+  const deleteNote = async (noteId: number, noteIndex: number) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      setNoteError('ID comandă lipsă');
+      return;
+    }
+
+    if (!noteId) {
+      setNoteError('ID notița lipsă');
+      return;
+    }
+
+    setDeletingNote(noteId);
+    setNoteError(null);
+    setNoteSuccess(null);
+
+    try {
+      console.log(`🗑️ Șterg notița cu ID ${noteId} pentru comanda ${confirmOrder.ID}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/sterge-notita/${confirmOrder.ID}/${noteId}`, {
+        method: 'post',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Notița ștearsă cu succes:', data);
+
+      if (data.success) {
+        console.log(`🗑️ ${data.message}`);
+        setNoteSuccess('Notița a fost ștearsă cu succes');
+
+        // Remove the note from the local notes list for immediate visual feedback
+        setLocalNotes(prevNotes => prevNotes.filter((_, index) => index !== noteIndex));
+
+        // Clear success message after 3 seconds
+        setTimeout(() => setNoteSuccess(null), 3000);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la ștergerea notiței:', error);
+      setNoteError(`Eroare la ștergerea notiței: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setDeletingNote(null);
+    }
+  };
+
   // No hash-based navigation - we'll use direct tab switching instead
 
-  // Simple console log to track the current tab
-  console.log("Current activeConfirmTab:", activeConfirmTab);
 
-  // Fetch SMS messages when the SMS tab is clicked
+  // Initialize difficulty state and client mood when confirmOrder changes
   useEffect(() => {
-    if (activeTopTab === 'tab2' && confirmOrder?.billing_details?._billing_phone) {
-      fetchSmsMessages(confirmOrder.billing_details._billing_phone);
+    if (confirmOrder?.dificultate) {
+      setDifficulty(confirmOrder.dificultate.toString());
+    } else {
+      setDifficulty("1");
     }
-  }, [activeTopTab, confirmOrder?.billing_details?._billing_phone]);
+
+    // Initialize client mood from mood_client if available
+    if ((confirmOrder as any)?.mood_client) {
+      setClientMood((confirmOrder as any).mood_client);
+      console.log("Setting client mood from API:", (confirmOrder as any).mood_client);
+    } else {
+      setClientMood("");
+    }
+
+    // Initialize local motives from confirmOrder
+    const motivesData = confirmOrder?.motive_comanda_neconfirmata;
+    if (motivesData && 'count' in motivesData && 'motives' in motivesData) {
+      // New structure
+      setLocalMotives(motivesData.motives || []);
+    } else {
+      // Old structure or no motives
+      setLocalMotives([]);
+    }
+
+    // Initialize local notes from confirmOrder
+    if (Array.isArray(confirmOrder?.notes)) {
+      setLocalNotes(confirmOrder.notes);
+    } else {
+      setLocalNotes([]);
+    }
+
+    // Initialize county, locality, and postal code state variables
+    setShippingState(confirmOrder?.shipping_details?._shipping_state || "");
+    setShippingCity(confirmOrder?.shipping_details?._shipping_city || "");
+    setShippingPostalCode(confirmOrder?.shipping_details?._shipping_postcode || "");
+    setBillingState(confirmOrder?.billing_details?._billing_state || "");
+    setBillingCity(confirmOrder?.billing_details?._billing_city || "");
+    setBillingPostalCode(confirmOrder?.billing_details?._billing_postcode || "");
+
+    // Initialize payment method state
+    setSelectedPaymentMethod(confirmOrder?.payment_method_title || "Plata ramburs");
+
+    // Initialize selected SMS phone number (default to billing phone)
+    setSelectedSmsPhone(confirmOrder?.billing_details?._billing_phone || "");
+
+    // Initialize map with existing address data when dialog opens
+    const initializeMapWithOrderData = async () => {
+      if (!confirmOrder) return;
+
+      // Try to use shipping address first, then billing address
+      const shippingAddress = confirmOrder.shipping_details?._shipping_address_1;
+      const shippingCity = confirmOrder.shipping_details?._shipping_city;
+      const shippingState = confirmOrder.shipping_details?._shipping_state;
+
+      const billingAddress = confirmOrder.billing_details?._billing_address_1;
+      const billingCity = confirmOrder.billing_details?._billing_city;
+      const billingState = confirmOrder.billing_details?._billing_state;
+
+      // Determine which address to use (prefer shipping, fallback to billing)
+      const addressToUse = shippingAddress || billingAddress;
+      const cityToUse = shippingCity || billingCity;
+      const stateToUse = shippingState || billingState;
+
+      if (addressToUse && cityToUse && stateToUse) {
+        try {
+          // Create full address string for geocoding
+          const fullAddress = `${addressToUse}, ${cityToUse}, ${stateToUse}, Romania`;
+          console.log("🗺️ Inițializez harta cu adresa din comandă:", fullAddress);
+
+          // Use Google Geocoding API to get coordinates
+          const geocoder = new google.maps.Geocoder();
+          geocoder.geocode({ address: fullAddress }, (results, status) => {
+            if (status === 'OK' && results && results[0]) {
+              const location = results[0].geometry.location;
+              const lat = location.lat();
+              const lng = location.lng();
+
+              setMapLocation({
+                lat: lat,
+                lng: lng,
+                address: fullAddress
+              });
+
+              console.log("🗺️ Harta inițializată cu coordonatele:", { lat, lng, address: fullAddress });
+
+              // Also check courier additional kilometers
+              if (stateToUse && cityToUse) {
+                checkFanCourierAdditionalKm(stateToUse, cityToUse);
+                checkSamedayAdditionalKm(stateToUse, cityToUse);
+              }
+            } else {
+              console.log("🗺️ Nu s-au putut obține coordonatele pentru adresa:", fullAddress, "Status:", status);
+            }
+          });
+        } catch (error) {
+          console.error("🗺️ Eroare la inițializarea hărții:", error);
+        }
+      }
+    };
+
+    // Initialize map when dialog opens and Google Maps is available
+    if (typeof google !== 'undefined' && google.maps) {
+      initializeMapWithOrderData();
+    } else {
+      // If Google Maps is not loaded yet, wait a bit and try again
+      const checkGoogleMaps = () => {
+        if (typeof google !== 'undefined' && google.maps) {
+          initializeMapWithOrderData();
+        } else {
+          setTimeout(checkGoogleMaps, 500);
+        }
+      };
+      checkGoogleMaps();
+    }
+  }, [confirmOrder]);
+
+  // Handler for difficulty change - calls the API endpoint and updates local state
+  const handleDifficultyChange = async (value: string) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    try {
+      // Update local state immediately for responsive UI
+      setDifficulty(value);
+
+      const response = await fetch(`https://crm.actium.ro/api/modificare-dificultate/${confirmOrder.ID}/${value}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      console.log(`Difficulty updated successfully to ${value}`);
+    } catch (error) {
+      console.error(`Error updating difficulty:`, error);
+      // Revert the local state if API call fails
+      if (confirmOrder?.dificultate) {
+        setDifficulty(confirmOrder.dificultate.toString());
+      } else {
+        setDifficulty("1");
+      }
+    }
+  };
+
+
+  // Handler for client mood change - calls the API endpoint and updates local state
+  const handleClientMoodChange = async (value: string) => {
+    if (!confirmOrder?.ID) {
+      console.error('No order ID available');
+      return;
+    }
+
+    try {
+      // Update local state immediately for responsive UI
+      setClientMood(value);
+
+      // No need to extract icon name as it's already passed without the prefix
+      const iconName = value;
+
+      const response = await fetch(`https://crm.actium.ro/api/mood-client/${confirmOrder.ID}/${iconName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      console.log(`Client mood updated successfully to ${iconName}`);
+    } catch (error) {
+      console.error(`Error updating client mood:`, error);
+      // Revert the local state if API call fails
+      setClientMood("");
+    }
+  };
 
   // Helper function to determine if an order is paid
   const isOrderPaid = (order: Comanda | null): boolean => {
@@ -455,6 +1409,39 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                     <Eye className="h-4 w-4 mr-2" />
                     Vezi comenzi
                   </Button>
+
+                  {/* Task List */}
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <h4 className="font-medium text-sm mb-3 text-muted-foreground">Taskuri de implementat:</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-puncte" className="rounded" />
+                        <label htmlFor="task-puncte" className="text-muted-foreground">1. Zona de puncte</label>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-persoane" className="rounded" />
+                        <label htmlFor="task-persoane" className="text-muted-foreground">2. Persoane apropiate</label>
+                      </div>
+
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-vezi-comenzi" className="rounded" />
+                        <label htmlFor="task-vezi-comenzi" className="text-muted-foreground">4. Butonul de vezi comenzi</label>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-lockere" className="rounded" />
+                        <label htmlFor="task-lockere" className="text-muted-foreground">5. Lista de lockere SameDay și FAN</label>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-personalizari" className="rounded" />
+                        <label htmlFor="task-personalizari" className="text-muted-foreground">6. Personalizările la produs și modificarea</label>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id="task-cupoane" className="rounded" />
+                        <label htmlFor="task-cupoane" className="text-muted-foreground">7. Adăugat și șters cupoane</label>
+                      </div>
+
+                    </div>
+                  </div>
                 </div>
               </Card>
 
@@ -462,12 +1449,21 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               <Card>
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-lg">Metodă de plată</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg">Metodă de plată</h3>
+                      {loadingPaymentMethod && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
                     <Badge variant={isOrderPaid(confirmOrder) ? 'success' : 'outline'}>
                       {getPaymentStatusText(confirmOrder)}
                     </Badge>
                   </div>
-                  <Select defaultValue={confirmOrder?.payment_method_title || "Plata ramburs"}>
+                  <Select 
+                    value={selectedPaymentMethod} 
+                    onValueChange={handlePaymentMethodChange}
+                    disabled={loadingPaymentMethod}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selectează metoda de plată" />
                     </SelectTrigger>
@@ -493,7 +1489,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   )}
 
                   {/* Display bank account information for unpaid bank transfers */}
-                  {confirmOrder?.payment_method_title === "Transfer bancar direct" && !isOrderPaid(confirmOrder) && (
+                  {selectedPaymentMethod === "Transfer bancar direct" && !isOrderPaid(confirmOrder) && (
                     <div className="mt-3 p-3 border border-border rounded-md bg-muted/20">
                       <h4 className="text-sm font-medium mb-2">Conturi bancare:</h4>
                       <div className="space-y-2 text-sm">
@@ -525,7 +1521,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   )}
 
                   {/* Display payment link button for unpaid card payments */}
-                  {confirmOrder?.payment_method_title === "Plata cu cardul Mobilpay" && !isOrderPaid(confirmOrder) && (
+                  {selectedPaymentMethod === "Plata cu cardul Mobilpay" && !isOrderPaid(confirmOrder) && (
                     <div className="mt-3">
                       <Button size="sm" className="w-full">
                         Generează link de plată Mobilpay
@@ -538,27 +1534,58 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               {/* Card 1: Delivery and Billing Tabs */}
               <Card>
                 <div className="p-4">
-                  <div className="flex border-b border-border mb-4">
-                    <button
-                      className={`px-4 py-2 font-medium ${
-                        activeAddressTab === 'shipping'
-                          ? 'border-b-2 border-primary text-primary'
-                          : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveAddressTab('shipping')}
-                    >
-                      Livrare
-                    </button>
-                    <button
-                      className={`px-4 py-2 font-medium ${
-                        activeAddressTab === 'billing'
-                          ? 'border-b-2 border-primary text-primary'
-                          : 'text-muted-foreground'
-                      }`}
-                      onClick={() => setActiveAddressTab('billing')}
-                    >
-                      Facturare
-                    </button>
+                  <div className="flex items-center justify-between border-b border-border mb-4">
+                    <div className="flex">
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeAddressTab === 'shipping'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveAddressTab('shipping')}
+                      >
+                        Livrare
+                      </button>
+                      <button
+                        className={`px-4 py-2 font-medium ${
+                          activeAddressTab === 'billing'
+                            ? 'border-b-2 border-primary text-primary'
+                            : 'text-muted-foreground'
+                        }`}
+                        onClick={() => setActiveAddressTab('billing')}
+                      >
+                        Facturare
+                      </button>
+                    </div>
+
+                    {/* Info icon with tooltip when addresses are different */}
+                    {getAddressDifferences() && (
+                      <div className="relative">
+                        <div
+                          className="cursor-help"
+                          onMouseEnter={() => setShowTooltip(true)}
+                          onMouseLeave={() => setShowTooltip(false)}
+                        >
+                          <Info className="h-4 w-4 text-blue-500" />
+                        </div>
+
+                        {/* Tooltip */}
+                        {showTooltip && (
+                          <div className="absolute right-0 top-6 z-50 w-80 p-3 bg-white border border-gray-200 rounded-lg shadow-lg">
+                            <div className="text-sm font-medium text-gray-900 mb-2">
+                              Diferențe între adresele de livrare și facturare:
+                            </div>
+                            <div className="space-y-1">
+                              {getAddressDifferences()?.map((diff, index) => (
+                                <div key={index} className="text-xs text-gray-600">
+                                  • {diff}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Shipping Address Tab */}
@@ -571,6 +1598,8 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                             id="shipping_firstName"
                             className="w-full p-2 border border-border rounded-md"
                             defaultValue={confirmOrder?.shipping_details._shipping_first_name || ""}
+                                              onBlur={(e) => handleShippingDetailChange("first_name", e.target.value)}
+                                              disabled={loadingField === "shipping_first_name"}
                           />
                         </div>
                         <div className="space-y-1">
@@ -579,6 +1608,8 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                             id="shipping_lastName"
                             className="w-full p-2 border border-border rounded-md"
                             defaultValue={confirmOrder?.shipping_details._shipping_last_name || ""}
+                                              onBlur={(e) => handleShippingDetailChange("last_name", e.target.value)}
+                                              disabled={loadingField === "shipping_last_name"}
                           />
                         </div>
                       </div>
@@ -589,97 +1620,109 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                           id="shipping_phone"
                           className="w-full p-2 border border-border rounded-md"
                           defaultValue={confirmOrder?.billing_details?._billing_phone || ""}
+                          onBlur={(e) => handleShippingDetailChange("phone", e.target.value)}
+                          disabled={loadingField === "shipping_phone"}
                         />
                       </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="shipping_address">Stradă/Număr</Label>
+                        <GooglePlacesAutocomplete
+                            id="shipping_address"
+                            value={confirmOrder?.shipping_details?._shipping_address_1 || ""}
+                            onChange={(value) => {
+                              // Just update the input value, don't try to update state
+                              console.log("Address value changed:", value);
+                            }}
+                            onBlur={(value) => handleShippingDetailChange("address_1", value)}
+                            onAddressResolved={async (data) => {
+                              // Automatically save all address details when resolved
+                              console.log("📦 Procesez adresa pentru livrare:", data);
 
+                              if (data.strada) {
+                                await handleShippingDetailChange("address_1", data.strada);
+                              }
+                              if (data.judet) {
+                                console.log(`🏛️ Trimit județ pentru livrare: "${data.judet}"`);
+                                await handleShippingDetailChange("state", data.judet);
+                              }
+                              if (data.localitate) {
+                                await handleShippingDetailChange("city", data.localitate);
+                              }
+                              if (data.cod_postal) {
+                                await handleShippingDetailChange("postcode", data.cod_postal);
+                              }
+
+                              // Update map location if coordinates are available
+                              if (data.lat && data.lng) {
+                                const fullAddress = `${data.strada || ""}, ${data.localitate || ""}, ${data.judet || ""}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',');
+                                setMapLocation({
+                                  lat: data.lat,
+                                  lng: data.lng,
+                                  address: fullAddress || "Adresa de livrare"
+                                });
+                                console.log("🗺️ Actualizez harta cu adresa de livrare:", { lat: data.lat, lng: data.lng, address: fullAddress });
+
+                                // Check FanCourier and SameDay additional kilometers
+                                if (data.judet && data.localitate) {
+                                  checkFanCourierAdditionalKm(data.judet, data.localitate);
+                                  checkSamedayAdditionalKm(data.judet, data.localitate);
+                                }
+                              }
+                            }}
+                            placeholder="Caută adresa..."
+                            disabled={loadingField === "shipping_address_1"}
+                            className="w-full"
+                            inputRef={shippingAddressRef}
+                            showMap={false}
+                        />
+                        <div className="flex flex-col gap-2 mt-2">
+                          <Button 
+                            onClick={() => handleShippingDetailChange("address_1", shippingAddressRef.current?.getValue() || "")}
+                            className="w-full"
+                            disabled={loadingField !== null}
+                          >
+                            Salvează adresa
+                          </Button>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label htmlFor="shipping_county">Județ</Label>
-                          <Select defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}>
-                            <SelectTrigger id="shipping_county">
-                              <SelectValue placeholder="Selectează județul" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Alba">Alba</SelectItem>
-                              <SelectItem value="Arad">Arad</SelectItem>
-                              <SelectItem value="Arges">Argeș</SelectItem>
-                              <SelectItem value="Bacau">Bacău</SelectItem>
-                              <SelectItem value="Bihor">Bihor</SelectItem>
-                              <SelectItem value="Bistrita-Nasaud">Bistrița-Năsăud</SelectItem>
-                              <SelectItem value="Botosani">Botoșani</SelectItem>
-                              <SelectItem value="Braila">Brăila</SelectItem>
-                              <SelectItem value="Brasov">Brașov</SelectItem>
-                              <SelectItem value="Bucuresti">București</SelectItem>
-                              <SelectItem value="Buzau">Buzău</SelectItem>
-                              <SelectItem value="Calarasi">Călărași</SelectItem>
-                              <SelectItem value="Caras-Severin">Caraș-Severin</SelectItem>
-                              <SelectItem value="Cluj">Cluj</SelectItem>
-                              <SelectItem value="Constanta">Constanța</SelectItem>
-                              <SelectItem value="Covasna">Covasna</SelectItem>
-                              <SelectItem value="Dambovita">Dâmbovița</SelectItem>
-                              <SelectItem value="Dolj">Dolj</SelectItem>
-                              <SelectItem value="Galati">Galați</SelectItem>
-                              <SelectItem value="Giurgiu">Giurgiu</SelectItem>
-                              <SelectItem value="Gorj">Gorj</SelectItem>
-                              <SelectItem value="Harghita">Harghita</SelectItem>
-                              <SelectItem value="Hunedoara">Hunedoara</SelectItem>
-                              <SelectItem value="Ialomita">Ialomița</SelectItem>
-                              <SelectItem value="Iasi">Iași</SelectItem>
-                              <SelectItem value="Ilfov">Ilfov</SelectItem>
-                              <SelectItem value="Maramures">Maramureș</SelectItem>
-                              <SelectItem value="Mehedinti">Mehedinți</SelectItem>
-                              <SelectItem value="Mures">Mureș</SelectItem>
-                              <SelectItem value="Neamt">Neamț</SelectItem>
-                              <SelectItem value="Olt">Olt</SelectItem>
-                              <SelectItem value="Prahova">Prahova</SelectItem>
-                              <SelectItem value="Salaj">Sălaj</SelectItem>
-                              <SelectItem value="Satu Mare">Satu Mare</SelectItem>
-                              <SelectItem value="Sibiu">Sibiu</SelectItem>
-                              <SelectItem value="Suceava">Suceava</SelectItem>
-                              <SelectItem value="Teleorman">Teleorman</SelectItem>
-                              <SelectItem value="Timis">Timiș</SelectItem>
-                              <SelectItem value="Tulcea">Tulcea</SelectItem>
-                              <SelectItem value="Valcea">Vâlcea</SelectItem>
-                              <SelectItem value="Vaslui">Vaslui</SelectItem>
-                              <SelectItem value="Vrancea">Vrancea</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <input
+                            id="shipping_county"
+                            className="w-full p-2 border border-border rounded-md"
+                            value={shippingState}
+                            onChange={(e) => setShippingState(e.target.value)}
+                            onBlur={(e) => handleShippingDetailChange("state", e.target.value)}
+                            disabled={loadingField === "shipping_state"}
+                            placeholder="Introduceți județul"
+                          />
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="shipping_city">Localitate</Label>
-                          <Select defaultValue={confirmOrder?.shipping_details?._shipping_city || "not_selected"}>
-                            <SelectTrigger id="shipping_city">
-                              <SelectValue placeholder="Selectează localitatea" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={confirmOrder?.shipping_details?._shipping_city || "not_selected"}>
-                                {confirmOrder?.shipping_details?._shipping_city || "Selectează localitatea"}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <input
+                            id="shipping_city"
+                            className="w-full p-2 border border-border rounded-md"
+                            value={shippingCity}
+                            onChange={(e) => setShippingCity(e.target.value)}
+                            onBlur={(e) => handleShippingDetailChange("city", e.target.value)}
+                            disabled={loadingField === "shipping_city"}
+                            placeholder="Introduceți localitatea"
+                          />
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <Label htmlFor="shipping_address">Stradă/Număr</Label>
-                        <Select defaultValue={confirmOrder?.shipping_details?._shipping_address_1 || "not_selected"}>
-                          <SelectTrigger id="shipping_address">
-                            <SelectValue placeholder="Selectează strada" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={confirmOrder?.shipping_details?._shipping_address_1 || "not_selected"}>
-                              {confirmOrder?.shipping_details?._shipping_address_1 || "Selectează strada"}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
 
                       <div className="space-y-1">
                         <Label htmlFor="shipping_postalCode">Cod poștal</Label>
                         <input
                           id="shipping_postalCode"
                           className="w-full p-2 border border-border rounded-md"
-                          defaultValue={confirmOrder?.shipping_details?._shipping_postcode || ""}
+                          value={shippingPostalCode}
+                          onChange={(e) => setShippingPostalCode(e.target.value)}
+                          onBlur={(e) => handleShippingDetailChange("postcode", e.target.value)}
+                          disabled={loadingField === "shipping_postcode"}
+                          placeholder="Introduceți codul poștal"
                         />
                       </div>
 
@@ -689,7 +1732,21 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                           id="shipping_addressDetails"
                           className="w-full p-2 border border-border rounded-md"
                           defaultValue={confirmOrder?.shipping_details?._shipping_address_2 || ""}
+                          onBlur={(e) => handleShippingDetailChange("address_2", e.target.value)}
+                          disabled={loadingField === "shipping_address_2"}
                         />
+                      </div>
+
+                      {/* Copy to Billing Button */}
+                      <div className="pt-4 border-t border-border">
+                        <Button 
+                          onClick={copyShippingToBilling}
+                          className="w-full"
+                          disabled={loadingField !== null}
+                          variant="outline"
+                        >
+                          📋 Copiază la facturare
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -704,6 +1761,8 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                             id="billing_firstName"
                             className="w-full p-2 border border-border rounded-md"
                             defaultValue={confirmOrder?.billing_details?._billing_first_name || ""}
+                            onBlur={(e) => handleBillingDetailChange("first_name", e.target.value)}
+                            disabled={loadingField === "billing_first_name"}
                           />
                         </div>
                         <div className="space-y-1">
@@ -712,6 +1771,8 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                             id="billing_lastName"
                             className="w-full p-2 border border-border rounded-md"
                             defaultValue={confirmOrder?.billing_details?._billing_last_name || ""}
+                            onBlur={(e) => handleBillingDetailChange("last_name", e.target.value)}
+                            disabled={loadingField === "billing_last_name"}
                           />
                         </div>
                       </div>
@@ -722,89 +1783,98 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                           id="billing_phone"
                           className="w-full p-2 border border-border rounded-md"
                           defaultValue={confirmOrder?.billing_details?._billing_phone || ""}
+                          onBlur={(e) => handleBillingDetailChange("phone", e.target.value)}
+                          disabled={loadingField === "billing_phone"}
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label htmlFor="billing_county">Județ</Label>
-                          <Select defaultValue={confirmOrder?.billing_details?._billing_state || ""}>
-                            <SelectTrigger id="billing_county">
-                              <SelectValue placeholder="Selectează județul" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Alba">Alba</SelectItem>
-                              <SelectItem value="Arad">Arad</SelectItem>
-                              <SelectItem value="Arges">Argeș</SelectItem>
-                              <SelectItem value="Bacau">Bacău</SelectItem>
-                              <SelectItem value="Bihor">Bihor</SelectItem>
-                              <SelectItem value="Bistrita-Nasaud">Bistrița-Năsăud</SelectItem>
-                              <SelectItem value="Botosani">Botoșani</SelectItem>
-                              <SelectItem value="Braila">Brăila</SelectItem>
-                              <SelectItem value="Brasov">Brașov</SelectItem>
-                              <SelectItem value="Bucuresti">București</SelectItem>
-                              <SelectItem value="Buzau">Buzău</SelectItem>
-                              <SelectItem value="Calarasi">Călărași</SelectItem>
-                              <SelectItem value="Caras-Severin">Caraș-Severin</SelectItem>
-                              <SelectItem value="Cluj">Cluj</SelectItem>
-                              <SelectItem value="Constanta">Constanța</SelectItem>
-                              <SelectItem value="Covasna">Covasna</SelectItem>
-                              <SelectItem value="Dambovita">Dâmbovița</SelectItem>
-                              <SelectItem value="Dolj">Dolj</SelectItem>
-                              <SelectItem value="Galati">Galați</SelectItem>
-                              <SelectItem value="Giurgiu">Giurgiu</SelectItem>
-                              <SelectItem value="Gorj">Gorj</SelectItem>
-                              <SelectItem value="Harghita">Harghita</SelectItem>
-                              <SelectItem value="Hunedoara">Hunedoara</SelectItem>
-                              <SelectItem value="Ialomita">Ialomița</SelectItem>
-                              <SelectItem value="Iasi">Iași</SelectItem>
-                              <SelectItem value="Ilfov">Ilfov</SelectItem>
-                              <SelectItem value="Maramures">Maramureș</SelectItem>
-                              <SelectItem value="Mehedinti">Mehedinți</SelectItem>
-                              <SelectItem value="Mures">Mureș</SelectItem>
-                              <SelectItem value="Neamt">Neamț</SelectItem>
-                              <SelectItem value="Olt">Olt</SelectItem>
-                              <SelectItem value="Prahova">Prahova</SelectItem>
-                              <SelectItem value="Salaj">Sălaj</SelectItem>
-                              <SelectItem value="Satu Mare">Satu Mare</SelectItem>
-                              <SelectItem value="Sibiu">Sibiu</SelectItem>
-                              <SelectItem value="Suceava">Suceava</SelectItem>
-                              <SelectItem value="Teleorman">Teleorman</SelectItem>
-                              <SelectItem value="Timis">Timiș</SelectItem>
-                              <SelectItem value="Tulcea">Tulcea</SelectItem>
-                              <SelectItem value="Valcea">Vâlcea</SelectItem>
-                              <SelectItem value="Vaslui">Vaslui</SelectItem>
-                              <SelectItem value="Vrancea">Vrancea</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <input
+                            id="billing_county"
+                            className="w-full p-2 border border-border rounded-md"
+                            value={billingState}
+                            onChange={(e) => setBillingState(e.target.value)}
+                            onBlur={(e) => handleBillingDetailChange("state", e.target.value)}
+                            disabled={loadingField === "billing_state"}
+                            placeholder="Introduceți județul"
+                          />
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="billing_city">Localitate</Label>
-                          <Select defaultValue={confirmOrder?.billing_details?._billing_city || "not_selected"}>
-                            <SelectTrigger id="billing_city">
-                              <SelectValue placeholder="Selectează localitatea" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={confirmOrder?.billing_details?._billing_city || "not_selected"}>
-                                {confirmOrder?.billing_details?._billing_city || "Selectează localitatea"}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <input
+                            id="billing_city"
+                            className="w-full p-2 border border-border rounded-md"
+                            value={billingCity}
+                            onChange={(e) => setBillingCity(e.target.value)}
+                            onBlur={(e) => handleBillingDetailChange("city", e.target.value)}
+                            disabled={loadingField === "billing_city"}
+                            placeholder="Introduceți localitatea"
+                          />
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <Label htmlFor="billing_address">Stradă/Număr</Label>
-                        <Select defaultValue={confirmOrder?.billing_details?._billing_address_1 || "not_selected"}>
-                          <SelectTrigger id="billing_address">
-                            <SelectValue placeholder="Selectează strada" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={confirmOrder?.billing_details?._billing_address_1 || "not_selected"}>
-                              {confirmOrder?.billing_details?._billing_address_1 || "Selectează strada"}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <GooglePlacesAutocomplete
+                          id="billing_address"
+                          value={confirmOrder?.billing_details?._billing_address_1 || ""}
+                          onChange={(value) => {
+                            // Just update the input value, don't try to update state
+                            console.log("Billing address value changed:", value);
+                          }}
+                          onBlur={(value) => handleBillingDetailChange("address_1", value)}
+                          onAddressResolved={async (data) => {
+                            // Automatically save all address details when resolved
+                            console.log("💳 Procesez adresa pentru facturare:", data);
+
+                            if (data.strada) {
+                              await handleBillingDetailChange("address_1", data.strada);
+                            }
+                            if (data.judet) {
+                              console.log(`🏛️ Trimit județ pentru facturare: "${data.judet}"`);
+                              await handleBillingDetailChange("state", data.judet);
+                            }
+                            if (data.localitate) {
+                              await handleBillingDetailChange("city", data.localitate);
+                            }
+                            if (data.cod_postal) {
+                              await handleBillingDetailChange("postcode", data.cod_postal);
+                            }
+
+                            // Update map location if coordinates are available
+                            if (data.lat && data.lng) {
+                              const fullAddress = `${data.strada || ""}, ${data.localitate || ""}, ${data.judet || ""}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',');
+                              setMapLocation({
+                                lat: data.lat,
+                                lng: data.lng,
+                                address: fullAddress || "Adresa de facturare"
+                              });
+                              console.log("🗺️ Actualizez harta cu adresa de facturare:", { lat: data.lat, lng: data.lng, address: fullAddress });
+
+                              // Check FanCourier and SameDay additional kilometers
+                              if (data.judet && data.localitate) {
+                                checkFanCourierAdditionalKm(data.judet, data.localitate);
+                                checkSamedayAdditionalKm(data.judet, data.localitate);
+                              }
+                            }
+                          }}
+                          placeholder="Caută adresa..."
+                          disabled={loadingField === "billing_address_1"}
+                          className="w-full"
+                          inputRef={billingAddressRef}
+                          showMap={false}
+                        />
+                        <div className="flex flex-col gap-2 mt-2">
+                          <Button 
+                            onClick={() => handleBillingDetailChange("address_1", billingAddressRef.current?.getValue() || "")}
+                            className="w-full"
+                            disabled={loadingField !== null}
+                          >
+                            Salvează adresa
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="space-y-1">
@@ -812,7 +1882,11 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                         <input
                           id="billing_postalCode"
                           className="w-full p-2 border border-border rounded-md"
-                          defaultValue={confirmOrder?.billing_details?._billing_postcode || ""}
+                          value={billingPostalCode}
+                          onChange={(e) => setBillingPostalCode(e.target.value)}
+                          onBlur={(e) => handleBillingDetailChange("postcode", e.target.value)}
+                          disabled={loadingField === "billing_postcode"}
+                          placeholder="Introduceți codul poștal"
                         />
                       </div>
 
@@ -822,6 +1896,8 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                           id="billing_addressDetails"
                           className="w-full p-2 border border-border rounded-md"
                           defaultValue={confirmOrder?.billing_details?._billing_address_2 || ""}
+                          onBlur={(e) => handleBillingDetailChange("address_2", e.target.value)}
+                          disabled={loadingField === "billing_address_2"}
                         />
                       </div>
                     </div>
@@ -830,82 +1906,212 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
               </Card>
 
               {/* Card 2: Courier options */}
-              <Card>
-                <div className="p-4">
-                  <h3 className="font-semibold text-lg mb-4">Opțiuni curier</h3>
+              {/*<Card>*/}
+              {/*  <div className="p-4">*/}
+              {/*    <h3 className="font-semibold text-lg mb-4">Opțiuni curier</h3>*/}
 
-                  <div className="space-y-4">
-                    {/* FAN Courier */}
-                    <div className="border border-border rounded-md p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">FAN Courier</h4>
-                        <img src="https://www.fancourier.ro/wp-content/themes/fancourier/images/logo.png" alt="FAN Courier" className="h-5" />
-                      </div>
+              {/*    <div className="space-y-4">*/}
+              {/*      /!* FAN Courier *!/*/}
+              {/*      <div className="border border-border rounded-md p-3">*/}
+              {/*        <div className="flex items-center justify-between mb-2">*/}
+              {/*          <h4 className="font-medium">FAN Courier</h4>*/}
+              {/*          <img src="https://www.fancourier.ro/wp-content/themes/fancourier/images/logo.png" alt="FAN Courier" className="h-5" />*/}
+              {/*        </div>*/}
 
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="fanCity">Localitate</Label>
-                            <input
-                              id="fanCity"
-                              className="w-full p-2 border border-border rounded-md"
-                              defaultValue={confirmOrder?.shipping_details?._shipping_city || ""}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="fanCounty">Județ</Label>
-                            <input
-                              id="fanCounty"
-                              className="w-full p-2 border border-border rounded-md"
-                              defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}
-                            />
-                          </div>
-                        </div>
+              {/*        <div className="space-y-3">*/}
+              {/*          <div className="grid grid-cols-2 gap-3">*/}
+              {/*            <div className="space-y-1">*/}
+              {/*              <Label htmlFor="fanCity">Localitate</Label>*/}
+              {/*              <input*/}
+              {/*                id="fanCity"*/}
+              {/*                className="w-full p-2 border border-border rounded-md"*/}
+              {/*                defaultValue={confirmOrder?.shipping_details?._shipping_city || ""}*/}
+              {/*              />*/}
+              {/*            </div>*/}
+              {/*            <div className="space-y-1">*/}
+              {/*              <Label htmlFor="fanCounty">Județ</Label>*/}
+              {/*              <input*/}
+              {/*                id="fanCounty"*/}
+              {/*                className="w-full p-2 border border-border rounded-md"*/}
+              {/*                defaultValue={confirmOrder?.shipping_details?._shipping_state || ""}*/}
+              {/*              />*/}
+              {/*            </div>*/}
+              {/*          </div>*/}
 
-                        <div className="space-y-1">
-                          <Label htmlFor="fanCommune">Comună (opțional)</Label>
-                          <input
-                            id="fanCommune"
-                            className="w-full p-2 border border-border rounded-md"
-                          />
-                        </div>
+              {/*          <div className="space-y-1">*/}
+              {/*            <Label htmlFor="fanCommune">Comună (opțional)</Label>*/}
+              {/*            <input*/}
+              {/*              id="fanCommune"*/}
+              {/*              className="w-full p-2 border border-border rounded-md"*/}
+              {/*            />*/}
+              {/*          </div>*/}
 
-                        <div>
-                          <Label className="mb-1 block">Zile livrare</Label>
-                          <div className="flex flex-wrap gap-2">
-                            <div className="flex items-center space-x-1">
-                              <input type="checkbox" id="fanMonday" className="rounded" />
-                              <Label htmlFor="fanMonday">Lu</Label>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <input type="checkbox" id="fanTuesday" className="rounded" />
-                              <Label htmlFor="fanTuesday">Ma</Label>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <input type="checkbox" id="fanWednesday" className="rounded" />
-                              <Label htmlFor="fanWednesday">Mi</Label>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <input type="checkbox" id="fanThursday" className="rounded" />
-                              <Label htmlFor="fanThursday">Jo</Label>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <input type="checkbox" id="fanFriday" className="rounded" />
-                              <Label htmlFor="fanFriday">Vi</Label>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
+              {/*          <div>*/}
+              {/*            <Label className="mb-1 block">Zile livrare</Label>*/}
+              {/*            <div className="flex flex-wrap gap-2">*/}
+              {/*              <div className="flex items-center space-x-1">*/}
+              {/*                <input type="checkbox" id="fanMonday" className="rounded" />*/}
+              {/*                <Label htmlFor="fanMonday">Lu</Label>*/}
+              {/*              </div>*/}
+              {/*              <div className="flex items-center space-x-1">*/}
+              {/*                <input type="checkbox" id="fanTuesday" className="rounded" />*/}
+              {/*                <Label htmlFor="fanTuesday">Ma</Label>*/}
+              {/*              </div>*/}
+              {/*              <div className="flex items-center space-x-1">*/}
+              {/*                <input type="checkbox" id="fanWednesday" className="rounded" />*/}
+              {/*                <Label htmlFor="fanWednesday">Mi</Label>*/}
+              {/*              </div>*/}
+              {/*              <div className="flex items-center space-x-1">*/}
+              {/*                <input type="checkbox" id="fanThursday" className="rounded" />*/}
+              {/*                <Label htmlFor="fanThursday">Jo</Label>*/}
+              {/*              </div>*/}
+              {/*              <div className="flex items-center space-x-1">*/}
+              {/*                <input type="checkbox" id="fanFriday" className="rounded" />*/}
+              {/*                <Label htmlFor="fanFriday">Vi</Label>*/}
+              {/*              </div>*/}
+              {/*            </div>*/}
+              {/*          </div>*/}
+              {/*        </div>*/}
+              {/*      </div>*/}
+              {/*    </div>*/}
+              {/*  </div>*/}
+              {/*</Card>*/}
             </div>
 
 
 
             {/* Center column (25%) - Confirmation & production options */}
             <div className="col-span-3 space-y-4">
+
+              <div className="w-full hartaAfisata">
+                <LoadScript 
+                  googleMapsApiKey="AIzaSyA1B8WNJx5X5S9tqN-hdyiZyrEwOcUpZvM" 
+                  libraries={libraries}
+                >
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    {mapLocation ? (
+                      <>
+                        <div className="bg-muted px-4 py-2 border-b border-border">
+                          <h3 className="font-medium text-sm">📍 {mapLocation.address}</h3>
+                        </div>
+                        <GoogleMap 
+                          mapContainerStyle={mapContainerStyle} 
+                          center={{ lat: mapLocation.lat, lng: mapLocation.lng }} 
+                          zoom={16}
+                        >
+                          <Marker
+                            position={{ lat: mapLocation.lat, lng: mapLocation.lng }}
+                            title={mapLocation.address}
+                          />
+                        </GoogleMap>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-[300px] bg-muted/20 text-muted-foreground">
+                        <div className="text-center">
+                          <div className="text-2xl mb-2">🗺️</div>
+                          <p className="text-sm">Selectează o adresă pentru a afișa harta</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </LoadScript>
+              </div>
+
+              {/* Courier Additional Kilometers Check - 3 Rows */}
+              <div className="border border-border rounded-lg p-4 bg-background ">
+                <div className="mb-3">
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium">Localitate:</span> {fanCourierKmCheck?.locality || samedayKmCheck?.locality || "Selectează o adresă"} <span className="font-medium">Județ:</span> {fanCourierKmCheck?.county || samedayKmCheck?.county || ""}
+                  </p>
+                </div>
+
+                <div className="gap-3 grid grid-cols-3">
+                  {/* DPD - Always available */}
+                  <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                    <img 
+                      src="/curieri/dpd.jpg" 
+                      alt="DPD" 
+                      className="w-12 h-8 object-contain"
+                    />
+                    <div className="flex items-center gap-2">
+                      <div className="text-green-600 text-lg">✓</div>
+                      <span className="text-sm font-medium">0 km</span>
+                    </div>
+                  </div>
+
+                  {/* FanCourier */}
+                  {fanCourierKmCheck && fanCourierKmCheck.checked ? (
+                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                      <img 
+                        src="/curieri/fan.jpg" 
+                        alt="FanCourier" 
+                        className="w-12 h-8 object-contain"
+                      />
+                      <div className="flex items-center gap-2">
+                        {fanCourierKmCheck.hasAdditionalKm ? (
+                          <>
+                            <div className="text-red-600 text-lg">✗</div>
+                            <span className="text-sm font-medium">{fanCourierKmCheck.kmValue} km</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-green-600 text-lg">✓</div>
+                            <span className="text-sm font-medium">0 km</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                      <img 
+                        src="/curieri/fan.jpg" 
+                        alt="FanCourier" 
+                        className="w-12 h-8 object-contain"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="text-green-600 text-lg">✓</div>
+                        <span className="text-sm font-medium">0 km</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SameDay */}
+                  {samedayKmCheck && samedayKmCheck.checked ? (
+                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                      <img 
+                        src="/curieri/sameday.jpg" 
+                        alt="SameDay" 
+                        className="w-12 h-8 object-contain"
+                      />
+                      <div className="flex items-center gap-2">
+                        {samedayKmCheck.hasAdditionalKm ? (
+                          <>
+                            <div className="text-red-600 text-lg">✗</div>
+                            <span className="text-sm font-medium">{samedayKmCheck.kmValue} km</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-green-600 text-lg">✓</div>
+                            <span className="text-sm font-medium">0 km</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                      <img 
+                        src="/curieri/sameday.jpg" 
+                        alt="SameDay" 
+                        className="w-12 h-8 object-contain"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="text-green-600 text-lg">✓</div>
+                        <span className="text-sm font-medium">0 km</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Top tabs */}
               <div className="bg-background border-b border-border">
@@ -920,17 +2126,6 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                       }`}
                   >
                    Confirmare
-                  </button>
-                  <button
-                      type="button"
-                      onClick={() => setActiveTopTab('tab2')}
-                      className={`px-4 py-2 font-medium ${
-                          activeTopTab === 'tab2'
-                              ? 'border-b-2 border-primary text-primary'
-                              : 'text-muted-foreground'
-                      }`}
-                  >
-                    SMS
                   </button>
                   <button
                       type="button"
@@ -970,16 +2165,29 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                               </div>
                               {/* Reason selection and add button */}
                               <div className="border border-border rounded-md p-4 mb-4 bg-yellow-50">
+                                {/* Error and Success Messages */}
+                                {motiveError && (
+                                  <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                                    {motiveError}
+                                  </div>
+                                )}
+                                {motiveSuccess && (
+                                  <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-md mb-4">
+                                    {motiveSuccess}
+                                  </div>
+                                )}
                                 <div className="mb-4">
                                   <Label htmlFor="reason" className="block mb-2">Motiv</Label>
                                   <div className="grid-cols-1 grid gap-3">
                                     <select
                                         id="reason"
                                         className="p-2 border border-border rounded-md bg-background text-foreground"
-
+                                        value={selectedReason}
+                                        onChange={(e) => setSelectedReason(e.target.value)}
+                                        disabled={addingMotive}
                                     >
                                       <option value="Selecteaza">Selectează</option>
-                                      <option value="Clientul nu raspunde" selected="selected">Clientul nu răspunde</option>
+                                      <option value="Clientul nu raspunde">Clientul nu răspunde</option>
                                       <option value="Telefon inchis">Telefon închis</option>
                                       <option value="Telefonul nu suna">Telefonul nu sună</option>
                                       <option value="Numar gresit">Număr greșit</option>
@@ -987,8 +2195,20 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                       <option value="Apel respins">Apel respins</option>
                                       <option value="Amanare confirmare">Amânare confirmare</option>
                                     </select>
-                                    <Button variant="outline" size="sm">
-                                      Adaugă motiv neconfirmare
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={addMotivNeconfirmare}
+                                      disabled={addingMotive || selectedReason === "Selecteaza"}
+                                    >
+                                      {addingMotive ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                          Se adaugă...
+                                        </>
+                                      ) : (
+                                        "Adaugă motiv neconfirmare"
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -996,27 +2216,19 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                   <div className="flex justify-between items-center mb-2">
                                     <h4 className="text-sm font-medium">Istoric motive neconfirmare</h4>
                                     {/* Show "Mută în anulate" button only when there are 3 or more active reasons */}
-                                    {(() => {
-                                      const motivesObj = confirmOrder?.motive_comanda_neconfirmata || {};
-                                      const motivesActiveCount = Object.keys(motivesObj).filter((k) => {
-                                        const v = motivesObj[k]?.meta_value;
-                                        return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
-                                      }).length;
-
-                                      return motivesActiveCount >= 3 ? (
-                                          <Button
-                                              variant="destructive"
-                                              size="sm"
-                                              className="text-xs"
-                                              onClick={() => {
-                                                // Logic to move the order to canceled
-                                                console.log('Moving order to canceled:', confirmOrder?.ID);
-                                              }}
-                                          >
-                                            Mută în anulate
-                                          </Button>
-                                      ) : null;
-                                    })()}
+                                    {localMotives.length >= 3 && (
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="text-xs"
+                                        onClick={() => {
+                                          // Logic to move the order to canceled
+                                          console.log('Moving order to canceled:', confirmOrder?.ID);
+                                        }}
+                                      >
+                                        Mută în anulate
+                                      </Button>
+                                    )}
                                   </div>
                                   <div className="border border-border rounded-md overflow-hidden">
                                     <table className="w-full text-sm">
@@ -1025,56 +2237,41 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                         <th className="py-2 px-3 text-left font-medium w-10">#</th>
                                         <th className="py-2 px-3 text-left font-medium">Motiv</th>
                                         <th className="py-2 px-3 text-right font-medium">Data</th>
+                                        <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
                                       </tr>
                                       </thead>
                                       <tbody>
-                                      {(() => {
-                                        const motivesObj = confirmOrder?.motive_comanda_neconfirmata || {};
-                                        const activeMotives = Object.keys(motivesObj).filter((k) => {
-                                          const v = motivesObj[k]?.meta_value;
-                                          return v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
-                                        });
-
-                                        if (activeMotives.length > 0) {
-                                          return activeMotives.map((key, index) => (
-                                              <tr key={key} className="border-t border-border">
-                                                <td className="py-2 px-3 text-center">{index + 1}</td>
-                                                <td className="py-2 px-3">{motivesObj[key]?.meta_key?.replace('_motive_comanda_neconfirmata_', '') || key}</td>
-                                                <td className="py-2 px-3 text-right text-muted-foreground">
-                                                  {/* Display the key as is, or try to format it as a date if it's a timestamp */}
-                                                  {(() => {
-                                                    try {
-                                                      // Try to parse the key as a timestamp
-                                                      const timestamp = parseInt(key);
-                                                      if (!isNaN(timestamp) && timestamp > 0) {
-                                                        const date = new Date(timestamp * 1000);
-                                                        // Check if the date is valid
-                                                        if (!isNaN(date.getTime())) {
-                                                          return date.toLocaleDateString('ro-RO', {
-                                                            year: 'numeric',
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                          });
-                                                        }
-                                                      }
-                                                    } catch (e) {
-                                                      // If parsing fails, fall back to the key
-                                                    }
-                                                    return key;
-                                                  })()}
-                                                </td>
-                                              </tr>
-                                          ));
-                                        } else {
-                                          return (
-                                              <tr className="border-t border-border">
-                                                <td colSpan={3} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
-                                              </tr>
-                                          );
-                                        }
-                                      })()}
+                                      {localMotives.length > 0 ? (
+                                        localMotives.map((motive, index) => (
+                                          <tr key={`${motive.data_si_ora}-${index}`} className="border-t border-border">
+                                            <td className="py-2 px-3 text-center">{index + 1}</td>
+                                            <td className="py-2 px-3">{motive.motiv_neconfirmare}</td>
+                                            <td className="py-2 px-3 text-right text-muted-foreground">
+                                              {motive.data_si_ora}
+                                            </td>
+                                            <td className="py-2 px-3 text-center">
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                onClick={() => deleteMotivNeconfirmare(index)}
+                                                disabled={deletingMotive === index}
+                                                title="Șterge motiv"
+                                              >
+                                                {deletingMotive === index ? (
+                                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                  <X className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr className="border-t border-border">
+                                          <td colSpan={4} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
+                                        </tr>
+                                      )}
                                       </tbody>
                                     </table>
                                   </div>
@@ -1156,7 +2353,6 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
                                   {/* SMS sending form */}
                                   <div className="flex flex-col space-y-2">
-                                    <Label htmlFor="smsMessage" className="text-sm font-medium">Trimite SMS către client</Label>
                                     <textarea
                                         id="smsMessage"
                                         className="w-full p-2 border border-border rounded-md min-h-[100px] resize-none"
@@ -1171,7 +2367,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                       </div>
                                       <Button
                                           onClick={sendSmsMessage}
-                                          disabled={loadingSms || !smsText.trim() || !confirmOrder?.billing_details?._billing_phone}
+                                          disabled={loadingSms || !smsText.trim() || !selectedSmsPhone}
                                           className="self-end"
                                       >
                                         {loadingSms ? (
@@ -1211,27 +2407,69 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                         {/* Client mood section */}
 
                         <div className="w-full">
-                          <div className=" grid grid-cols-7 gap-1" >
-
-                            <button  autoupdate="atentie_client" valoare="fas fa-angry" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md " data-original-title="Recalcitrant">
+                          <div className="grid grid-cols-7 gap-1">
+                            <button 
+                              onClick={() => handleClientMoodChange("angry")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Recalcitrant" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "angry" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-angry"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-dizzy" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md " data-original-title="IQ mic">
+                            <button 
+                              onClick={() => handleClientMoodChange("dizzy")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="IQ mic" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "dizzy" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-dizzy"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-grin-hearts" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md" data-original-title="Dragut">
+                            <button 
+                              onClick={() => handleClientMoodChange("grin-hearts")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Dragut" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-hearts" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-grin-hearts"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-frown" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md" data-original-title="Morocanos">
+                            <button 
+                              onClick={() => handleClientMoodChange("frown")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Morocanos" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "frown" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-frown"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-meh-rolling-eyes" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md" data-original-title="Pretentios">
+                            <button 
+                              onClick={() => handleClientMoodChange("meh-rolling-eyes")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Pretentios" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "meh-rolling-eyes" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-meh-rolling-eyes"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-meh" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md" data-original-title="Indiferent">
+                            <button 
+                              onClick={() => handleClientMoodChange("meh")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Indiferent" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "meh" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-meh"></i>
                             </button>
-                            <button autoupdate="atentie_client" valoare="fas fa-grin-squint" onClick={(e) => { /* autoupdate(this) */ }} autoidcomanda="1139251" data-toggle="tooltip" data-placement="top" title="" className="col-span-1 border p-2 rounded-md" data-original-title="Amuzat">
+                            {/* Debug: {clientMood} */}
+                            <button 
+                              onClick={() => handleClientMoodChange("grin-squint")}
+                              data-toggle="tooltip" 
+                              data-placement="top" 
+                              title="Amuzat" 
+                              className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-squint" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                            >
                               <i className="fas fa-grin-squint"></i>
                             </button>
                           </div>
@@ -1263,116 +2501,6 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                       </Card>
                   )}
 
-                  {activeTopTab === 'tab2' && (
-                      <div className="p-4 bg-muted/20 rounded-md">
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-lg">Mesaje SMS</h3>
-                            <div className="text-sm text-muted-foreground">
-                              {confirmOrder?.billing_details?._billing_phone ? (
-                                  <span>Telefon: {confirmOrder.billing_details._billing_phone}</span>
-                              ) : (
-                                  <span className="text-red-500">Număr de telefon lipsă</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="border border-border rounded-md p-4 mb-4">
-                            <div className="space-y-4">
-                              {/* Error message */}
-                              {smsError && (
-                                  <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md">
-                                    {smsError}
-                                  </div>
-                              )}
-
-                              {/* SMS messages table */}
-                              <div className="border border-border rounded-md overflow-hidden">
-                                <table className="w-full text-sm">
-                                  <thead className="bg-muted">
-                                  <tr>
-                                    <th className="py-2 px-3 text-left font-medium">Mesaj</th>
-                                    <th className="py-2 px-3 text-right font-medium w-32">Data</th>
-                                  </tr>
-                                  </thead>
-                                  <tbody>
-                                  {loadingSms ? (
-                                      <tr className="border-t border-border">
-                                        <td colSpan={2} className="py-8 text-center">
-                                          <div className="flex items-center justify-center">
-                                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
-                                            <span className="text-muted-foreground">Se încarcă mesajele SMS...</span>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                  ) : smsMessages.length > 0 ? (
-                                      smsMessages.map((sms) => (
-                                          <tr key={sms.id} className="border-t border-border">
-                                            <td className="py-2 px-3">
-                                              {/* Decode URL-encoded message */}
-                                              {decodeURIComponent(sms.message.replace(/\+/g, ' '))}
-                                            </td>
-                                            <td className="py-2 px-3 text-right text-muted-foreground">
-                                              {new Date(sms.created_at).toLocaleDateString('ro-RO', {
-                                                year: 'numeric',
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                              })}
-                                            </td>
-                                          </tr>
-                                      ))
-                                  ) : (
-                                      <tr className="border-t border-border">
-                                        <td colSpan={2} className="py-4 text-center text-muted-foreground">
-                                          Nu există mesaje SMS pentru acest client.
-                                        </td>
-                                      </tr>
-                                  )}
-                                  </tbody>
-                                </table>
-                              </div>
-
-                              {/* SMS sending form */}
-                              <div className="flex flex-col space-y-2">
-                                <Label htmlFor="smsMessage" className="text-sm font-medium">Trimite SMS către client</Label>
-                                <textarea
-                                    id="smsMessage"
-                                    className="w-full p-2 border border-border rounded-md min-h-[100px] resize-none"
-                                    placeholder="Scrie mesajul SMS aici..."
-                                    value={smsText}
-                                    onChange={(e) => setSmsText(e.target.value)}
-                                    disabled={loadingSms}
-                                />
-                                <div className="flex justify-between items-center">
-                                  <div className="text-xs text-muted-foreground">
-                                    {smsText.length} caractere
-                                  </div>
-                                  <Button
-                                      onClick={sendSmsMessage}
-                                      disabled={loadingSms || !smsText.trim() || !confirmOrder?.billing_details?._billing_phone}
-                                      className="self-end"
-                                  >
-                                    {loadingSms ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                          Se trimite...
-                                        </>
-                                    ) : (
-                                        <>
-                                          <Send className="h-4 w-4 mr-2" />
-                                          Trimite SMS
-                                        </>
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                  )}
 
                   {activeTopTab === 'tab3' && (
                       <div className="p-4 bg-muted/20 rounded-md">
@@ -1406,68 +2534,52 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   </div>
                   <div className="grid grid-cols-5 gap-1">
                     <button
-
                         valoare="1"
-                        onClick={(e) => { /* autoupdate(this) */ }}
-                        autoidcomanda="1139251"
+                        onClick={() => handleDifficultyChange("1")}
                         data-toggle="tooltip"
                         data-placement="top"
-                        title=""
-                        className={`col-span-1 border p-2 rounded-md font-medium ${confirmOrder?.dificultate == 1 ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                        data-original-title="Foarte ușor"
+                        title="Foarte ușor"
+                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "1" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
                     >
                       1
                     </button>
                     <button
-
                         valoare="2"
-                        onClick={(e) => { /* autoupdate(this) */ }}
-                        autoidcomanda="1139251"
+                        onClick={() => handleDifficultyChange("2")}
                         data-toggle="tooltip"
                         data-placement="top"
-                        title=""
-                        className={`col-span-1 border p-2 rounded-md font-medium ${confirmOrder?.dificultate == 2 ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                        data-original-title="Ușor"
+                        title="Ușor"
+                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "2" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
                     >
                       2
                     </button>
                     <button
-
                         valoare="3"
-                        onClick={(e) => { /* autoupdate(this) */ }}
-                        autoidcomanda="1139251"
+                        onClick={() => handleDifficultyChange("3")}
                         data-toggle="tooltip"
                         data-placement="top"
-                        title=""
-                        className={`col-span-1 border p-2 rounded-md font-medium ${confirmOrder?.dificultate == 3 ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                        data-original-title="Mediu"
+                        title="Mediu"
+                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "3" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
                     >
                       3
                     </button>
                     <button
-
                         valoare="4"
-                        onClick={(e) => { /* autoupdate(this) */ }}
-                        autoidcomanda="1139251"
+                        onClick={() => handleDifficultyChange("4")}
                         data-toggle="tooltip"
                         data-placement="top"
-                        title=""
-                        className={`col-span-1 border p-2 rounded-md font-medium ${confirmOrder?.dificultate == 4 ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                        data-original-title="Dificil"
+                        title="Dificil"
+                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "4" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
                     >
                       4
                     </button>
-                    {}
                     <button
-
                         valoare="5"
-                        onClick={(e) => { /* autoupdate(this) */ }}
-                        autoidcomanda="1139251"
+                        onClick={() => handleDifficultyChange("5")}
                         data-toggle="tooltip"
                         data-placement="top"
-                        title=""
-                        className={`col-span-1 border p-2 rounded-md font-medium ${confirmOrder?.dificultate == 5 ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                        data-original-title="Foarte dificil"
+                        title="Foarte dificil"
+                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "5" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
                     >
                       5
                     </button>
@@ -1500,51 +2612,258 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
 
 
-            {/* Notes column (25%) - Order notes */}
+            {/* Notes and SMS column (25%) - Order notes and SMS */}
             <div className="col-span-2 space-y-4 h-full">
-              <Card className="h-full flex flex-col">
+              <Card className="h-full flex flex-col border-0 shadow-none p-0">
                 <div className="p-4 flex flex-col flex-grow">
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-lg">Notițe</h3>
+
+
+                  {/* Tabs for Notes and SMS */}
+                  <div className="flex border-b border-border mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveNotesTab('notite')}
+                      className={`px-3 py-2 text-sm font-medium ${
+                        activeNotesTab === 'notite'
+                          ? 'border-b-2 border-primary text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Notite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNotesTab('sms');
+                        // Fetch SMS messages when SMS tab is clicked
+                        if (confirmOrder?.billing_details?._billing_phone) {
+                          fetchSmsMessages(confirmOrder.billing_details._billing_phone);
+                        }
+                      }}
+                      className={`px-3 py-2 text-sm font-medium ${
+                        activeNotesTab === 'sms'
+                          ? 'border-b-2 border-primary text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      SMS
+                    </button>
                   </div>
-                  {/* Chat-like interface for adding notes */}
-                  <div className="mb-4">
-                    <div className="flex items-end gap-2">
-                      <textarea 
-                        className="flex-grow p-2 border border-border rounded-md min-h-[60px] resize-none"
-                        placeholder="Scrie o notiță..."
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                      />
-                      <Button 
-                        className="h-10 px-3" 
-                        onClick={() => {
-                          if (noteText.trim()) {
-                            console.log('Sending note:', noteText, 'for order:', confirmOrder?.ID);
-                            // Here you would typically call an API to add the note
-                            setNoteText('');
-                          }
-                        }}
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
+
+                  {/* Notes tab content */}
+                  {activeNotesTab === 'notite' && (
+                    <>
+                      {/* Error and Success Messages */}
+                      {noteError && (
+                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                          {noteError}
+                        </div>
+                      )}
+                      {noteSuccess && (
+                        <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-md mb-4">
+                          {noteSuccess}
+                        </div>
+                      )}
+
+                      {/* Chat-like interface for adding notes */}
+                      <div className="mb-4">
+                        <div className="flex items-end gap-2">
+                          <textarea 
+                            className="flex-grow p-2 border border-border rounded-md min-h-[60px] resize-none"
+                            placeholder="Scrie o notiță..."
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                          />
+                          <Button 
+                            className="h-10 px-3" 
+                            onClick={addNote}
+                            disabled={addingNote || !noteText.trim()}
+                          >
+                            {addingNote ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-3 overflow-y-auto flex-grow min-h-0">
+                        {localNotes.length > 0 ? (
+                            localNotes.map((note, idx) => (
+                                <div key={idx} className="border border-border rounded-md p-3">
+                                  <div className="flex justify-between items-start mb-1">
+                                    <span className="font-medium text-sm">Admin</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">
+                                        {new Date(note.comment_date).toLocaleDateString('ro-RO', {
+                                          year: 'numeric',
+                                          month: 'short',
+                                          day: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        })}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => {
+                                          if (note.comment_ID) {
+                                            deleteNote(note.comment_ID, idx);
+                                          } else {
+                                            // For newly added notes without comment_ID, just remove from local state
+                                            setLocalNotes(prevNotes => prevNotes.filter((_, index) => index !== idx));
+                                          }
+                                        }}
+                                        disabled={note.comment_ID ? deletingNote === note.comment_ID : false}
+                                        title="Șterge notița"
+                                      >
+                                        {note.comment_ID && deletingNote === note.comment_ID ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <X className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <p className="text-sm">{note.comment_content}</p>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* SMS tab content */}
+                  {activeNotesTab === 'sms' && (
+                    <div className="flex flex-col flex-grow">
+                      {/*<div className="mb-4">*/}
+                      {/*  <div className="text-sm text-muted-foreground">*/}
+                      {/*    {selectedSmsPhone ? (*/}
+                      {/*      <span>Telefon selectat: {selectedSmsPhone}</span>*/}
+                      {/*    ) : (*/}
+                      {/*      <span className="text-red-500">Număr de telefon lipsă</span>*/}
+                      {/*    )}*/}
+                      {/*  </div>*/}
+                      {/*</div>*/}
+
+                      {/* Error message */}
+                      {smsError && (
+                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                          {smsError}
+                        </div>
+                      )}
+
+                      {/* SMS sending form - moved to top */}
+                      <div className="flex flex-col space-y-2 mb-4">
+
+                        {/* Phone number selection */}
+                        <div className="flex items-center gap-2">
+                          <Select value={selectedSmsPhone} onValueChange={setSelectedSmsPhone}>
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Selectează numărul de telefon" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {confirmOrder?.billing_details?._billing_phone && (
+                                <SelectItem value={confirmOrder.billing_details._billing_phone}>
+                                  Facturare: {confirmOrder.billing_details._billing_phone}
+                                </SelectItem>
+                              )}
+                              {confirmOrder?.shipping_details?._shipping_phone && 
+                               confirmOrder.shipping_details._shipping_phone !== confirmOrder?.billing_details?._billing_phone && (
+                                <SelectItem value={confirmOrder.shipping_details._shipping_phone}>
+                                  Livrare: {confirmOrder.shipping_details._shipping_phone}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <textarea
+                          id="smsMessage"
+                          className="w-full p-2 border border-border rounded-md min-h-[80px] resize-none"
+                          placeholder="Scrie mesajul SMS aici..."
+                          value={smsText}
+                          onChange={(e) => setSmsText(e.target.value)}
+                          disabled={loadingSms}
+                        />
+                        <div className="flex justify-between items-center">
+                          <div className="text-xs text-muted-foreground">
+                            {smsText.length} caractere
+                          </div>
+                          <Button
+                            onClick={sendSmsMessage}
+                            disabled={loadingSms || !smsText.trim() || !selectedSmsPhone}
+                            className="self-end"
+                          >
+                            {loadingSms ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Se trimite...
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-4 w-4 mr-2" />
+                                Trimite SMS
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* SMS messages table with scroll */}
+                      <div className="border border-border rounded-md overflow-hidden flex-grow min-h-0">
+                        <div className="overflow-y-auto h-full">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted sticky top-0">
+                              <tr>
+                                <th className="py-2 px-3 text-left font-medium">Mesaj</th>
+                                <th className="py-2 px-3 text-right font-medium w-32">Data</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {loadingSms ? (
+                                <tr className="border-t border-border">
+                                  <td colSpan={2} className="py-8 text-center">
+                                    <div className="flex items-center justify-center">
+                                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+                                      <span className="text-muted-foreground">Se încarcă mesajele SMS...</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : smsMessages.length > 0 ? (
+                                smsMessages.map((sms) => (
+                                  <tr key={sms.id} className="border-t border-border">
+                                    <td className="py-2 px-3">
+                                      {/* Decode URL-encoded message */}
+                                      {decodeURIComponent(sms.message.replace(/\+/g, ' '))}
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-muted-foreground">
+                                      {new Date(sms.created_at).toLocaleDateString('ro-RO', {
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr className="border-t border-border">
+                                  <td colSpan={2} className="py-4 text-center text-muted-foreground">
+                                    Nu există mesaje SMS pentru acest client.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-3 overflow-y-auto flex-grow">
-                    {Array.isArray(confirmOrder?.notes) && confirmOrder.notes.length > 0 ? (
-                        confirmOrder.notes.map((note, idx) => (
-                            <div key={idx} className="border border-border rounded-md p-3">
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="font-medium text-sm">Admin</span>
-                                <span className="text-xs text-muted-foreground">{note.comment_date}</span>
-                              </div>
-                              <p className="text-sm">{note.comment_content}</p>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="text-sm text-muted-foreground">Nu există notițe pentru această comandă.</div>
-                    )}
-                  </div>
+                  )}
                 </div>
               </Card>
             </div>
