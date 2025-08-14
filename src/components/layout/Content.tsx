@@ -157,45 +157,6 @@ export const Content = ({
   const [movingCommandId, setMovingCommandId] = useState<number | null>(null);
   const [startingCommandId, setStartingCommandId] = useState<number | null>(null);
 
-  // Backlines tasks: checked IDs per day+zone, persisted in localStorage
-  const [taskCheckedIds, setTaskCheckedIds] = useState<number[]>([]);
-  const getTodayStr = () => {
-    try {
-      const d = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    } catch {
-      return '';
-    }
-  };
-  const getTasksKey = (zone: string) => `tasks:${getTodayStr()}:${(zone || '').toLowerCase()}`;
-  const loadTasksFromStorage = (zone: string) => {
-    try {
-      const raw = localStorage.getItem(getTasksKey(zone));
-      const arr = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(arr)) return arr.filter((x) => typeof x === 'number');
-    } catch {}
-    return [];
-  };
-  const saveTasksToStorage = (zone: string, ids: number[]) => {
-    try {
-      localStorage.setItem(getTasksKey(zone), JSON.stringify(ids));
-    } catch {}
-  };
-  useEffect(() => {
-    // Load when zone changes
-    setTaskCheckedIds(loadTasksFromStorage(zonaActiva));
-  }, [zonaActiva]);
-  const isTaskChecked = (id: number) => taskCheckedIds.includes(id);
-  const toggleTaskChecked = (id: number) => {
-    setTaskCheckedIds((prev) => {
-      const exists = prev.includes(id);
-      const next = exists ? prev.filter((x) => x !== id) : [...prev, id];
-      // Persist per day+zone
-      saveTasksToStorage(zonaActiva, next);
-      return next;
-    });
-  };
 
   // Highlight the order row that opened AWB history
   const [highlightedOrderId, setHighlightedOrderId] = useState<number | null>(null);
@@ -1410,42 +1371,6 @@ export const Content = ({
             </Card>
           )}
 
-            {/* Backlines tasks summary */}
-          {zonaActiva === 'backlines' && displayedComenzi.length > 0 && (
-            (() => {
-              const checked = displayedComenzi.filter((c) => isTaskChecked(c.ID)).length;
-              const total = displayedComenzi.length;
-              const remaining = Math.max(0, total - checked);
-              const nextNames = displayedComenzi.filter((c) => !isTaskChecked(c.ID)).slice(0, 5).map((c) => {
-                const first = c.billing_details?._billing_first_name || c.shipping_details._shipping_first_name || '';
-                const last = c.billing_details?._billing_last_name || c.shipping_details._shipping_last_name || '';
-                return `${first} ${last}`.trim() || `#${c.ID}`;
-              });
-              return (
-                <div className="p-2 border border-border rounded-md bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div className="text-xs sm:text-sm">
-                    <span className="mr-3"><span className="text-muted-foreground">Bifate azi:</span> <span className="font-semibold">{checked}</span></span>
-                    <span><span className="text-muted-foreground">Rămase:</span> <span className="font-semibold">{remaining}</span></span>
-                  </div>
-                  {nextNames.length > 0 && (
-                    <div className="text-xs sm:text-sm flex items-center gap-2 flex-wrap">
-                      <span className="text-muted-foreground">Urmează:</span>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {nextNames.map((n, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded bg-accent text-accent-foreground border border-border">
-                            {n}
-                          </span>
-                        ))}
-                        {remaining > nextNames.length && (
-                          <span className="text-muted-foreground">+{remaining - nextNames.length} altele</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()
-          )}
 
           {/* Backlines status filters */}
           {zonaActiva === 'backlines' && statusesWithCounts.length > 0 && (
@@ -1486,7 +1411,7 @@ export const Content = ({
           {paymentMethodsWithCounts.length > 0 && (
             <div className="mt-2 p-2 border border-border rounded-md bg-white">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-medium text-muted-foreground">Filtrează după metodă de plată:</span>
+                {/*<span className="text-sm font-medium text-muted-foreground">Filtrează după metodă de plată:</span>*/}
                 {selectedPaymentMethod && (
                   <Button
                     variant="ghost"
@@ -1520,11 +1445,6 @@ export const Content = ({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {zonaActiva === 'backlines' && (
-                        <TableHead className="w-10">
-                          <span className="sr-only">Task</span>
-                        </TableHead>
-                      )}
                       <TableHead>ID</TableHead>
                       {zonaActiva === 'backlines' && (
                         <TableHead>Curier</TableHead>
@@ -1590,18 +1510,7 @@ export const Content = ({
                       }
                       const totalCols = isBacklines ? 7 : 6;
                       return (
-                        <TableRow key={`${c.ID}-main`} className={`${(highlightedOrderId === c.ID || isTaskChecked(c.ID) || isPreOneDay) ? 'bg-green-100' : ''}`}>
-                          {zonaActiva === 'backlines' && (
-                            <TableCell className="w-10">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 align-middle"
-                                checked={isTaskChecked(c.ID)}
-                                onChange={() => toggleTaskChecked(c.ID)}
-                                title={isTaskChecked(c.ID) ? 'Debifează task' : 'Bifează task'}
-                              />
-                            </TableCell>
-                          )}
+                        <TableRow key={`${c.ID}-main`} className={`${(highlightedOrderId === c.ID || isPreOneDay) ? 'bg-green-100' : ''}`}>
                           <TableCell>
                             <Button
                               variant="outline"
@@ -1632,7 +1541,7 @@ export const Content = ({
                                         {isFAN && (
                                           <img src="/curieri/fan.jpg" alt="FAN Courier" className="w-6 h-4 object-contain rounded bg-white" />
                                         )}
-                                        <span className="text-xs text-muted-foreground">{courierText}</span>
+                                        {/*<span className="text-xs text-muted-foreground">{courierText}</span>*/}
                                       </>
                                     ) : (
                                       <span className="text-xs text-muted-foreground">-</span>

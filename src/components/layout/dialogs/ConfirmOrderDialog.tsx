@@ -1411,37 +1411,37 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   </Button>
 
                   {/* Task List */}
-                  <div className="mt-4 pt-4 border-t border-border">
-                    <h4 className="font-medium text-sm mb-3 text-muted-foreground">Taskuri de implementat:</h4>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-puncte" className="rounded" />
-                        <label htmlFor="task-puncte" className="text-muted-foreground">1. Zona de puncte</label>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-persoane" className="rounded" />
-                        <label htmlFor="task-persoane" className="text-muted-foreground">2. Persoane apropiate</label>
-                      </div>
-
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-vezi-comenzi" className="rounded" />
-                        <label htmlFor="task-vezi-comenzi" className="text-muted-foreground">4. Butonul de vezi comenzi</label>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-lockere" className="rounded" />
-                        <label htmlFor="task-lockere" className="text-muted-foreground">5. Lista de lockere SameDay și FAN</label>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-personalizari" className="rounded" />
-                        <label htmlFor="task-personalizari" className="text-muted-foreground">6. Personalizările la produs și modificarea</label>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" id="task-cupoane" className="rounded" />
-                        <label htmlFor="task-cupoane" className="text-muted-foreground">7. Adăugat și șters cupoane</label>
-                      </div>
-
-                    </div>
-                  </div>
+                  {/*<div className="mt-4 pt-4 border-t border-border">*/}
+                  {/*  <h4 className="font-medium text-sm mb-3 text-muted-foreground">Taskuri de implementat:</h4>*/}
+                  {/*  <div className="space-y-2">*/}
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-puncte" className="rounded" />*/}
+                  {/*      <label htmlFor="task-puncte" className="text-muted-foreground">1. Zona de puncte</label>*/}
+                  {/*    </div>*/}
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-persoane" className="rounded" />*/}
+                  {/*      <label htmlFor="task-persoane" className="text-muted-foreground">2. Persoane apropiate</label>*/}
+                  {/*    </div>*/}
+                  
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-vezi-comenzi" className="rounded" />*/}
+                  {/*      <label htmlFor="task-vezi-comenzi" className="text-muted-foreground">4. Butonul de vezi comenzi</label>*/}
+                  {/*    </div>*/}
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-lockere" className="rounded" />*/}
+                  {/*      <label htmlFor="task-lockere" className="text-muted-foreground">5. Lista de lockere SameDay și FAN</label>*/}
+                  {/*    </div>*/}
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-personalizari" className="rounded" />*/}
+                  {/*      <label htmlFor="task-personalizari" className="text-muted-foreground">6. Personalizările la produs și modificarea</label>*/}
+                  {/*    </div>*/}
+                  {/*    <div className="flex items-center space-x-2 text-sm">*/}
+                  {/*      <input type="checkbox" id="task-cupoane" className="rounded" />*/}
+                  {/*      <label htmlFor="task-cupoane" className="text-muted-foreground">7. Adăugat și șters cupoane</label>*/}
+                  {/*    </div>*/}
+                  
+                  {/*  </div>*/}
+                  {/*</div>*/}
                 </div>
               </Card>
 
