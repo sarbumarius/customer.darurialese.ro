@@ -18,10 +18,12 @@ const WORK_HISTORY_API_URL = `${API_BASE}/api/zile-muncite-luna-curenta-nou`;
 
 const initialStatsData: StatItem[] = [
     { title: "De sunat", value: 0, icon: PhoneCall, color: "bg-purple-500", group: 'right' },
-    { title: "Procesare", value: 0, icon: Cog, color: "bg-blue-500", group: 'right' },
     { title: "Neconfirmate", value: 0, icon: HelpCircle, color: "bg-gray-500", group: 'right' },
+
     { title: "In asteptare", value: 0, icon: Clock, color: "bg-yellow-500", group: 'right' },
     { title: "Plata in asteptare", value: 0, icon: CreditCard, color: "bg-red-500", group: 'right' },
+    { title: "Procesare", value: 0, icon: Cog, color: "bg-blue-500", group: 'right' },
+
     { title: "Aprobare", value: 0, icon: CheckCircle2, color: "bg-orange-500", group: 'right' },
     { title: "Gresite", value: 0, icon: XCircle, color: "bg-pink-500", group: 'right' },
     { title: "Lipsa poze", value: 0, icon: ImageOff, color: "bg-indigo-500", group: 'right' },

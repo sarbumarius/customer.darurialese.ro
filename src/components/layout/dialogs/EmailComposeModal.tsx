@@ -135,14 +135,48 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
             <Button 
               size="sm"
               disabled={emailSubmitting || !isLikelyValidEmail(emailTo) || !isLikelyValidEmail(emailFrom)}
-              onClick={() => {
+              onClick={async () => {
                 if (emailSubmitting) return;
                 setEmailSubmitting(true);
-                setTimeout(() => {
+
+                try {
+                  console.log(`📧 Trimit email către: ${emailTo}`);
+
+                  // Send email using the API endpoint with separate subject field
+                  const response = await fetch('https://crm.actium.ro/api/trimitere-email', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      to_email: emailTo,
+                      message: emailMessage,
+                      subject: emailSubject
+                    }),
+                  });
+
+                  if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                  }
+
+                  const data = await response.json();
+                  console.log('✅ Email trimis cu succes:', data);
+
+                  if (data.success) {
+                    // Success - close modal and reset form
+                    setShowEmailSendModal(false);
+                    resetForm();
+                  } else {
+                    throw new Error(data.message || 'Eroare la trimiterea email-ului');
+                  }
+
+                } catch (error) {
+                  console.error('❌ Eroare la trimiterea email-ului:', error);
+                  // You might want to show an error message to the user here
+                  alert(`Eroare la trimiterea email-ului: ${error.message || 'Eroare necunoscută'}`);
+                } finally {
                   setEmailSubmitting(false);
-                  setShowEmailSendModal(false);
-                  resetForm();
-                }, 300);
+                }
               }}
             >
               {emailSubmitting ? 'Se trimite…' : 'Trimite'}

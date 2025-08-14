@@ -28,6 +28,42 @@ interface SmsMessage {
   updated_at: string;
 }
 
+// Interface for Points data (old structure - keeping for compatibility)
+interface PuncteData {
+  ID: number;
+  customer_user: string;
+  shipping_details: {
+    _shipping_first_name: string;
+    _shipping_last_name?: string;
+    _shipping_address_1?: string;
+    _shipping_city?: string;
+    _shipping_state?: string;
+    _shipping_postcode?: string;
+    _shipping_phone?: string;
+  };
+  billing_details?: {
+    _billing_first_name?: string;
+    _billing_last_name?: string;
+    _billing_phone?: string;
+    _billing_email?: string;
+  };
+  puncte?: number;
+  total_comenzi?: number;
+  data_ultima_comanda?: string;
+}
+
+// Interface for Points History data (new structure as requested)
+interface PuncteHistoryItem {
+  id: number;
+  points: number;
+  type: string;
+  user_points_id: number | null;
+  order_id: number | null;
+  admin_user_id: number | null;
+  data: string | null;
+  date: string;
+}
+
 // Map configuration
 const mapContainerStyle = { width: "100%", height: "300px", borderRadius: "0.5rem" };
 const defaultCenter = { lat: 44.4268, lng: 26.1025 }; // București
@@ -158,7 +194,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   const [activeTopTab, setActiveTopTab] = useState<'tab1' | 'tab3' | 'tab4'>('tab1');
 
   // State for the notes tabs
-  const [activeNotesTab, setActiveNotesTab] = useState<'notite' | 'sms'>('notite');
+  const [activeNotesTab, setActiveNotesTab] = useState<'notite' | 'sms' | 'puncte'>('notite');
 
   // State for SMS messages
   const [smsMessages, setSmsMessages] = useState<SmsMessage[]>([]);
@@ -167,12 +203,38 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   const [smsText, setSmsText] = useState("");
   const [selectedSmsPhone, setSelectedSmsPhone] = useState<string>("");
 
+  // State for Points data (old structure)
+  const [puncteData, setPuncteData] = useState<PuncteData[]>([]);
+  const [loadingPuncte, setLoadingPuncte] = useState(false);
+  const [puncteError, setPuncteError] = useState<string | null>(null);
+
+  // State for Points History data (new structure)
+  const [puncteHistory, setPuncteHistory] = useState<PuncteHistoryItem[]>([]);
+  const [loadingPuncteHistory, setLoadingPuncteHistory] = useState(false);
+  const [puncteHistoryError, setPuncteHistoryError] = useState<string | null>(null);
+
+  // State for adding points
+  const [puncteInput, setPuncteInput] = useState<string>("");
+  const [motivInput, setMotivInput] = useState<string>("");
+  const [addingPuncte, setAddingPuncte] = useState(false);
+  const [puncteAddError, setPuncteAddError] = useState<string | null>(null);
+  const [puncteAddSuccess, setPuncteAddSuccess] = useState<string | null>(null);
+
+  // State for email and WhatsApp sending
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+  const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
+
   // State for motiv neconfirmare
   const [selectedReason, setSelectedReason] = useState<string>("Clientul nu raspunde");
   const [addingMotive, setAddingMotive] = useState(false);
   const [deletingMotive, setDeletingMotive] = useState<number | null>(null);
   const [motiveError, setMotiveError] = useState<string | null>(null);
   const [motiveSuccess, setMotiveSuccess] = useState<string | null>(null);
+  const [isMotiveHistoryCollapsed, setIsMotiveHistoryCollapsed] = useState<boolean>(true);
 
   // Local state for motives list (for immediate visual updates)
   const [localMotives, setLocalMotives] = useState<Array<{
@@ -843,6 +905,300 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     }
   };
 
+  // Function to fetch Points data
+  const fetchPuncte = async (customerUser: string) => {
+    if (!customerUser) {
+      setPuncteError("Customer user lipsă");
+      return;
+    }
+
+    setLoadingPuncte(true);
+    setPuncteError(null);
+
+    try {
+      console.log("Fetching points data for customer:", confirmOrder.customer_user);
+
+      const apiUrl = `https://crm.actium.ro/api/puncte-client/${confirmOrder.customer_user}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("Points data received:", data);
+
+      if (Array.isArray(data)) {
+        setPuncteData(data);
+      } else {
+        setPuncteData([]);
+      }
+    } catch (error) {
+      console.error("Error fetching points data:", error);
+      setPuncteError("Eroare la încărcarea datelor de puncte: " + (error.message || "Eroare necunoscută"));
+    } finally {
+      setLoadingPuncte(false);
+    }
+  };
+
+  // Function to fetch Points History data (new structure as requested)
+  const fetchPuncteHistory = async (customerUser: string) => {
+    if (!customerUser) {
+      setPuncteHistoryError("Customer user lipsă");
+      return;
+    }
+
+    setLoadingPuncteHistory(true);
+    setPuncteHistoryError(null);
+
+    try {
+      console.log("Fetching points history data for customer:", confirmOrder.customer_user);
+      // Using the same API endpoint but expecting different data structure
+      const apiUrl = `https://crm.actium.ro/api/puncte-client/${confirmOrder.customer_user}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("Points history data received:", data);
+
+      if (Array.isArray(data)) {
+        // Sort by date (newest first) as requested
+        const sortedData = data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setPuncteHistory(sortedData);
+      } else {
+        setPuncteHistory([]);
+      }
+    } catch (error) {
+      console.error("Error fetching points history data:", error);
+      setPuncteHistoryError("Eroare la încărcarea istoricului de puncte: " + (error.message || "Eroare necunoscută"));
+    } finally {
+      setLoadingPuncteHistory(false);
+    }
+  };
+
+  // Function to add points
+  const addPuncte = async () => {
+    if (!confirmOrder?.customer_user) {
+      setPuncteAddError("Customer user lipsă");
+      return;
+    }
+
+    if (!puncteInput.trim()) {
+      setPuncteAddError("Numărul de puncte nu poate fi gol");
+      return;
+    }
+
+    if (!motivInput.trim()) {
+      setPuncteAddError("Motivul nu poate fi gol");
+      return;
+    }
+
+    const puncteValue = parseInt(puncteInput.trim());
+    if (isNaN(puncteValue)) {
+      setPuncteAddError("Numărul de puncte trebuie să fie un număr valid");
+      return;
+    }
+
+    setAddingPuncte(true);
+    setPuncteAddError(null);
+    setPuncteAddSuccess(null);
+
+    try {
+      console.log(`📝 Adaug ${puncteValue} puncte pentru clientul ${confirmOrder.customer_user} cu motivul: ${motivInput.trim()}`);
+
+      const response = await fetch(`https://crm.actium.ro/api/adauga-puncte-client/${confirmOrder.customer_user}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          points: puncteValue,
+          type: motivInput.trim(),
+          order_id: confirmOrder.ID || null,
+          data: null
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Puncte adăugate cu succes:', data);
+
+      if (data.success) {
+        // Update points history with the response data
+        if (data.points_log && Array.isArray(data.points_log)) {
+          // Sort by date (newest first) as requested
+          const sortedData = data.points_log.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setPuncteHistory(sortedData);
+        }
+
+        setPuncteAddSuccess(`${puncteValue} puncte au fost adăugate cu succes`);
+        setPuncteInput(''); // Clear the inputs
+        setMotivInput('');
+
+        // Clear success message after 3 seconds
+        setTimeout(() => setPuncteAddSuccess(null), 3000);
+      }
+
+    } catch (error) {
+      console.error('❌ Eroare la adăugarea punctelor:', error);
+      setPuncteAddError(`Eroare la adăugarea punctelor: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setAddingPuncte(false);
+    }
+  };
+
+  // Function to create billing message template
+  const createBillingMessage = () => {
+    if (!confirmOrder) return '';
+
+    const customerName = `${confirmOrder.billing_details?._billing_first_name || confirmOrder.shipping_details._shipping_first_name} ${confirmOrder.billing_details?._billing_last_name || confirmOrder.shipping_details._shipping_last_name}`;
+    const totalAmount = confirmOrder.pret_total || confirmOrder.order_total_formatted || '0';
+    const totalItems = confirmOrder.total_buc || 1;
+    const orderId = confirmOrder.ID;
+
+    return `Bună ziua, ${customerName},
+
+Așa cum am discutat, revenim cu detaliile conturilor bancare pentru achitarea comenzii #${orderId}.
+
+Detalii comandă:
+• Total articole: ${totalItems}
+• Total de plată: ${totalAmount} RON
+
+Conturi disponibile pentru transfer bancar:
+
+Banca Transilvania
+IBAN: RO60BTRLRONCRT0415555501
+
+ING Bank România
+IBAN: RO74INGB0000999906973879
+
+Trezorerie operativă Sector 5
+IBAN: RO65TREZ7055069XXX012556
+
+Vă rugăm să menționați numărul comenzii #${orderId} în descrierea transferului.
+
+Cu stimă,
+Echipa Daruri Alese`;
+  };
+
+  // Function to send email with billing information
+  const sendBillingEmail = async () => {
+    if (!confirmOrder?.billing_details?._billing_email) {
+      setEmailError("Adresa de email pentru facturare lipsește");
+      return;
+    }
+
+    setSendingEmail(true);
+    setEmailError(null);
+    setEmailSuccess(null);
+
+    try {
+      console.log(`📧 Trimit email cu informații de facturare la: ${confirmOrder.billing_details._billing_email}`);
+
+      const message = createBillingMessage();
+
+      // Send email using the API endpoint
+      const response = await fetch('https://crm.actium.ro/api/trimitere-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to_email: confirmOrder.billing_details._billing_email,
+          message: message,
+          subject: 'Conturi bancare Perfect Gift SRL (Brand Daruri Alese)'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Email trimis cu succes:', data);
+
+      if (data.success) {
+        setEmailSuccess('Email-ul a fost trimis cu succes către client');
+      } else {
+        throw new Error(data.message || 'Eroare la trimiterea email-ului');
+      }
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setEmailSuccess(null), 5000);
+
+    } catch (error) {
+      console.error('❌ Eroare la trimiterea email-ului:', error);
+      setEmailError(`Eroare la trimiterea email-ului: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  // Function to send WhatsApp message with billing information
+  const sendBillingWhatsApp = async () => {
+    const phoneNumber = confirmOrder?.billing_details?._billing_phone || confirmOrder?.shipping_details._shipping_phone;
+
+    if (!phoneNumber) {
+      setWhatsAppError("Numărul de telefon pentru facturare lipsește");
+      return;
+    }
+
+    setSendingWhatsApp(true);
+    setWhatsAppError(null);
+    setWhatsAppSuccess(null);
+
+    try {
+      console.log(`📱 Trimit mesaj WhatsApp cu informații de facturare la: ${phoneNumber}`);
+
+      const message = createBillingMessage();
+
+      // Clean phone number - remove spaces, dashes, and ensure it starts with country code
+      let cleanPhone = phoneNumber.replace(/[\s\-\(\)]/g, '');
+      if (cleanPhone.startsWith('0')) {
+        cleanPhone = '40' + cleanPhone.substring(1);
+      } else if (!cleanPhone.startsWith('40')) {
+        cleanPhone = '40' + cleanPhone;
+      }
+
+      // Create WhatsApp link
+      const whatsappLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+      // Open WhatsApp link
+      window.open(whatsappLink, '_blank');
+
+      setWhatsAppSuccess('WhatsApp a fost deschis cu mesajul pregătit');
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setWhatsAppSuccess(null), 5000);
+
+    } catch (error) {
+      console.error('❌ Eroare la trimiterea mesajului WhatsApp:', error);
+      setWhatsAppError(`Eroare la trimiterea mesajului WhatsApp: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  };
+
   // Function to add a new motiv neconfirmare
   const addMotivNeconfirmare = async () => {
     if (!confirmOrder?.ID) {
@@ -1076,6 +1432,13 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
   // Initialize difficulty state and client mood when confirmOrder changes
   useEffect(() => {
+    // Reset tabs to default when opening dialog for a different client
+    setActiveNotesTab('notite');
+
+    // Reset points input fields when switching clients
+    setPuncteInput('');
+    setMotivInput('');
+
     if (confirmOrder?.dificultate) {
       setDifficulty(confirmOrder.dificultate.toString());
     } else {
@@ -1192,6 +1555,13 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     }
   }, [confirmOrder]);
 
+  // Fetch points data when points tab is activated
+  useEffect(() => {
+    if (activeConfirmTab === 'puncte' && confirmOrder?.customer_user) {
+      fetchPuncte(confirmOrder.customer_user);
+    }
+  }, [activeConfirmTab, confirmOrder?.customer_user]);
+
   // Handler for difficulty change - calls the API endpoint and updates local state
   const handleDifficultyChange = async (value: string) => {
     if (!confirmOrder?.ID) {
@@ -1304,7 +1674,11 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
           <div className="flex items-center gap-3 flex-wrap">
             {/* Order ID and client name */}
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-sm">#{confirmOrder?.ID}</Badge>
+              <Badge variant="outline" className="text-sm">
+                <a href={`https://darurialese.com/wp-admin/post.php?post=${confirmOrder?.ID}&action=edit`} target="_blank" rel="noopener noreferrer">
+                #{confirmOrder?.ID}
+                </a>
+                </Badge>
               <span className="font-medium">
                 {confirmOrder?.shipping_details._shipping_first_name}{" "}
                 {confirmOrder?.shipping_details._shipping_last_name}
@@ -1410,6 +1784,143 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                     Vezi comenzi
                   </Button>
 
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg">Metodă de plată</h3>
+                        {loadingPaymentMethod && (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                      <Badge variant={isOrderPaid(confirmOrder) ? 'success' : 'outline'}>
+                        {getPaymentStatusText(confirmOrder)}
+                      </Badge>
+                    </div>
+                    <Select
+                        value={selectedPaymentMethod}
+                        onValueChange={handlePaymentMethodChange}
+                        disabled={loadingPaymentMethod}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selectează metoda de plată" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Plata ramburs">Plata ramburs</SelectItem>
+                        <SelectItem value="Transfer bancar direct">Transfer bancar direct</SelectItem>
+                        <SelectItem value="Plata cu cardul Mobilpay">Plata cu cardul Mobilpay</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* Display payment date if available */}
+                    {confirmOrder?.date_paid_unix && (
+                        <div className="mt-3 text-sm text-muted-foreground">
+                          <span className="font-medium">Data plății:</span> {formatDate(new Date(parseInt(confirmOrder.date_paid_unix) * 1000).toISOString())}
+                        </div>
+                    )}
+
+                    {/* Display currency if available */}
+                    {/*{confirmOrder?.currency && (*/}
+                    {/*    <div className="mt-1 text-sm text-muted-foreground">*/}
+                    {/*      <span className="font-medium">Monedă:</span> {confirmOrder.currency}*/}
+                    {/*    </div>*/}
+                    {/*)}*/}
+
+                    {/* Display bank account information for unpaid bank transfers */}
+                    {selectedPaymentMethod === "Transfer bancar direct" && !isOrderPaid(confirmOrder) && (
+                        <div className="mt-3 p-3 border border-border rounded-md bg-muted/20">
+                          <h4 className="text-sm font-medium mb-2">Conturi bancare:</h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <div className="font-medium">BANCA TRANSILVANIA</div>
+                              <div>RO60BTRLRONCRT0415555501</div>
+                            </div>
+                            <div>
+                              <div className="font-medium">ING BANK ROMANIA</div>
+                              <div>RO74INGB0000999906973879</div>
+                            </div>
+                            <div>
+                              <div className="font-medium">Trezorerie operativa Sector 5</div>
+                              <div>RO65TREZ7055069XXX012556</div>
+                            </div>
+                          </div>
+
+                          {/* Error and Success Messages */}
+                          {emailError && (
+                            <div className="bg-red-50 border border-red-200 text-red-600 p-2 rounded-md mt-3 text-sm">
+                              {emailError}
+                            </div>
+                          )}
+                          {emailSuccess && (
+                            <div className="bg-green-50 border border-green-200 text-green-600 p-2 rounded-md mt-3 text-sm">
+                              {emailSuccess}
+                            </div>
+                          )}
+                          {whatsAppError && (
+                            <div className="bg-red-50 border border-red-200 text-red-600 p-2 rounded-md mt-3 text-sm">
+                              {whatsAppError}
+                            </div>
+                          )}
+                          {whatsAppSuccess && (
+                            <div className="bg-green-50 border border-green-200 text-green-600 p-2 rounded-md mt-3 text-sm">
+                              {whatsAppSuccess}
+                            </div>
+                          )}
+
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="mt-3 w-full"
+                            onClick={sendBillingEmail}
+                            disabled={sendingEmail || !confirmOrder?.billing_details?._billing_email}
+                          >
+                            {sendingEmail ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Se trimite...
+                              </>
+                            ) : (
+                              "Trimite pe email"
+                            )}
+                          </Button>
+
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="mt-2 w-full"
+                            onClick={sendBillingWhatsApp}
+                            disabled={sendingWhatsApp || (!confirmOrder?.billing_details?._billing_phone && !confirmOrder?.shipping_details._shipping_phone)}
+                          >
+                            {sendingWhatsApp ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Se trimite...
+                              </>
+                            ) : (
+                              "Trimite pe WhatsApp"
+                            )}
+                          </Button>
+
+                          <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-2 w-full"
+                              onClick={() => setShowVerifyPaymentModal(true)}
+                          >
+                            Verifică plata
+                          </Button>
+                        </div>
+                    )}
+
+                    {/* Display payment link button for unpaid card payments */}
+                    {selectedPaymentMethod === "Plata cu cardul Mobilpay" && !isOrderPaid(confirmOrder) && (
+                        <div className="mt-3">
+                          <Button size="sm" className="w-full">
+                            Generează link de plată Mobilpay
+                          </Button>
+                        </div>
+                    )}
+                  </div>
+
                   {/* Task List */}
                   {/*<div className="mt-4 pt-4 border-t border-border">*/}
                   {/*  <h4 className="font-medium text-sm mb-3 text-muted-foreground">Taskuri de implementat:</h4>*/}
@@ -1422,7 +1933,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   {/*      <input type="checkbox" id="task-persoane" className="rounded" />*/}
                   {/*      <label htmlFor="task-persoane" className="text-muted-foreground">2. Persoane apropiate</label>*/}
                   {/*    </div>*/}
-                  
+
                   {/*    <div className="flex items-center space-x-2 text-sm">*/}
                   {/*      <input type="checkbox" id="task-vezi-comenzi" className="rounded" />*/}
                   {/*      <label htmlFor="task-vezi-comenzi" className="text-muted-foreground">4. Butonul de vezi comenzi</label>*/}
@@ -1439,97 +1950,13 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   {/*      <input type="checkbox" id="task-cupoane" className="rounded" />*/}
                   {/*      <label htmlFor="task-cupoane" className="text-muted-foreground">7. Adăugat și șters cupoane</label>*/}
                   {/*    </div>*/}
-                  
+
                   {/*  </div>*/}
                   {/*</div>*/}
                 </div>
               </Card>
 
-              {/* Card 0: Payment Method */}
-              <Card>
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-lg">Metodă de plată</h3>
-                      {loadingPaymentMethod && (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      )}
-                    </div>
-                    <Badge variant={isOrderPaid(confirmOrder) ? 'success' : 'outline'}>
-                      {getPaymentStatusText(confirmOrder)}
-                    </Badge>
-                  </div>
-                  <Select 
-                    value={selectedPaymentMethod} 
-                    onValueChange={handlePaymentMethodChange}
-                    disabled={loadingPaymentMethod}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selectează metoda de plată" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Plata ramburs">Plata ramburs</SelectItem>
-                      <SelectItem value="Transfer bancar direct">Transfer bancar direct</SelectItem>
-                      <SelectItem value="Plata cu cardul Mobilpay">Plata cu cardul Mobilpay</SelectItem>
-                    </SelectContent>
-                  </Select>
 
-                  {/* Display payment date if available */}
-                  {confirmOrder?.date_paid_unix && (
-                    <div className="mt-3 text-sm text-muted-foreground">
-                      <span className="font-medium">Data plății:</span> {formatDate(new Date(parseInt(confirmOrder.date_paid_unix) * 1000).toISOString())}
-                    </div>
-                  )}
-
-                  {/* Display currency if available */}
-                  {confirmOrder?.currency && (
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      <span className="font-medium">Monedă:</span> {confirmOrder.currency}
-                    </div>
-                  )}
-
-                  {/* Display bank account information for unpaid bank transfers */}
-                  {selectedPaymentMethod === "Transfer bancar direct" && !isOrderPaid(confirmOrder) && (
-                    <div className="mt-3 p-3 border border-border rounded-md bg-muted/20">
-                      <h4 className="text-sm font-medium mb-2">Conturi bancare:</h4>
-                      <div className="space-y-2 text-sm">
-                        <div>
-                          <div className="font-medium">BANCA TRANSILVANIA</div>
-                          <div>RO60BTRLRONCRT0415555501</div>
-                        </div>
-                        <div>
-                          <div className="font-medium">ING BANK ROMANIA</div>
-                          <div>RO74INGB0000999906973879</div>
-                        </div>
-                        <div>
-                          <div className="font-medium">Trezorerie operativa Sector 5</div>
-                          <div>RO65TREZ7055069XXX012556</div>
-                        </div>
-                      </div>
-                      <Button size="sm" variant="outline" className="mt-3 w-full">
-                        Trimite pe email
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="mt-2 w-full"
-                        onClick={() => setShowVerifyPaymentModal(true)}
-                      >
-                        Verifică plata
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Display payment link button for unpaid card payments */}
-                  {selectedPaymentMethod === "Plata cu cardul Mobilpay" && !isOrderPaid(confirmOrder) && (
-                    <div className="mt-3">
-                      <Button size="sm" className="w-full">
-                        Generează link de plată Mobilpay
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </Card>
 
               {/* Card 1: Delivery and Billing Tabs */}
               <Card>
@@ -2127,17 +2554,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                   >
                    Confirmare
                   </button>
-                  <button
-                      type="button"
-                      onClick={() => setActiveTopTab('tab3')}
-                      className={`px-4 py-2 font-medium ${
-                          activeTopTab === 'tab3'
-                              ? 'border-b-2 border-primary text-primary'
-                              : 'text-muted-foreground'
-                      }`}
-                  >
-                    Puncte
-                  </button>
+
 
                     <button
                         type="button"
@@ -2214,7 +2631,21 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                 </div>
                                 <div className="mb-4">
                                   <div className="flex justify-between items-center mb-2">
-                                    <h4 className="text-sm font-medium">Istoric motive neconfirmare</h4>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsMotiveHistoryCollapsed(!isMotiveHistoryCollapsed)}
+                                      className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
+                                    >
+                                      <span>Istoric motive neconfirmare ({localMotives.length} {localMotives.length === 1 ? 'încercare' : 'încercări'})</span>
+                                      <svg 
+                                        className={`w-4 h-4 transition-transform ${isMotiveHistoryCollapsed ? 'rotate-0' : 'rotate-180'}`}
+                                        fill="none" 
+                                        stroke="currentColor" 
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                    </button>
                                     {/* Show "Mută în anulate" button only when there are 3 or more active reasons */}
                                     {localMotives.length >= 3 && (
                                       <Button
@@ -2230,51 +2661,53 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                       </Button>
                                     )}
                                   </div>
-                                  <div className="border border-border rounded-md overflow-hidden">
-                                    <table className="w-full text-sm">
-                                      <thead className="bg-muted">
-                                      <tr>
-                                        <th className="py-2 px-3 text-left font-medium w-10">#</th>
-                                        <th className="py-2 px-3 text-left font-medium">Motiv</th>
-                                        <th className="py-2 px-3 text-right font-medium">Data</th>
-                                        <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
-                                      </tr>
-                                      </thead>
-                                      <tbody>
-                                      {localMotives.length > 0 ? (
-                                        localMotives.map((motive, index) => (
-                                          <tr key={`${motive.data_si_ora}-${index}`} className="border-t border-border">
-                                            <td className="py-2 px-3 text-center">{index + 1}</td>
-                                            <td className="py-2 px-3">{motive.motiv_neconfirmare}</td>
-                                            <td className="py-2 px-3 text-right text-muted-foreground">
-                                              {motive.data_si_ora}
-                                            </td>
-                                            <td className="py-2 px-3 text-center">
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                onClick={() => deleteMotivNeconfirmare(index)}
-                                                disabled={deletingMotive === index}
-                                                title="Șterge motiv"
-                                              >
-                                                {deletingMotive === index ? (
-                                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                  <X className="h-3 w-3" />
-                                                )}
-                                              </Button>
-                                            </td>
-                                          </tr>
-                                        ))
-                                      ) : (
-                                        <tr className="border-t border-border">
-                                          <td colSpan={4} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
+                                  {!isMotiveHistoryCollapsed && (
+                                    <div className="border border-border rounded-md overflow-hidden">
+                                      <table className="w-full text-sm">
+                                        <thead className="bg-muted">
+                                        <tr>
+                                          <th className="py-2 px-3 text-left font-medium w-10">#</th>
+                                          <th className="py-2 px-3 text-left font-medium">Motiv</th>
+                                          <th className="py-2 px-3 text-right font-medium">Data</th>
+                                          <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
                                         </tr>
-                                      )}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                        </thead>
+                                        <tbody>
+                                        {localMotives.length > 0 ? (
+                                          localMotives.map((motive, index) => (
+                                            <tr key={`${motive.data_si_ora}-${index}`} className="border-t border-border">
+                                              <td className="py-2 px-3 text-center">{index + 1}</td>
+                                              <td className="py-2 px-3">{motive.motiv_neconfirmare}</td>
+                                              <td className="py-2 px-3 text-right text-muted-foreground">
+                                                {motive.data_si_ora}
+                                              </td>
+                                              <td className="py-2 px-3 text-center">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                  onClick={() => deleteMotivNeconfirmare(index)}
+                                                  disabled={deletingMotive === index}
+                                                  title="Șterge motiv"
+                                                >
+                                                  {deletingMotive === index ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                  ) : (
+                                                    <X className="h-3 w-3" />
+                                                  )}
+                                                </Button>
+                                              </td>
+                                            </tr>
+                                          ))
+                                        ) : (
+                                          <tr className="border-t border-border">
+                                            <td colSpan={4} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
+                                          </tr>
+                                        )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </>
@@ -2392,7 +2825,74 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                         {activeConfirmTab === 'puncte' && (
                             <div>
                               <h3 className="font-semibold text-lg mb-4">Puncte</h3>
-                              <p className="text-muted-foreground">Conținutul pentru tab-ul Puncte va fi implementat ulterior.</p>
+
+                              {/* Error message */}
+                              {puncteError && (
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                                  <p className="text-red-600 text-sm">{puncteError}</p>
+                                </div>
+                              )}
+
+                              {/* Loading state */}
+                              {loadingPuncte ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                  <span className="text-muted-foreground">Se încarcă datele de puncte...</span>
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {/* Points data table */}
+                                  <div className="border border-border rounded-md overflow-hidden">
+                                    <table className="w-full text-sm">
+                                      <thead className="bg-muted">
+                                        <tr>
+                                          <th className="py-2 px-3 text-left font-medium">ID</th>
+                                          <th className="py-2 px-3 text-left font-medium">Customer User</th>
+                                          <th className="py-2 px-3 text-left font-medium">Nume</th>
+                                          <th className="py-2 px-3 text-left font-medium">Telefon</th>
+                                          <th className="py-2 px-3 text-left font-medium">Puncte</th>
+                                          <th className="py-2 px-3 text-left font-medium">Total Comenzi</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {puncteData.length > 0 ? (
+                                          puncteData.map((item, index) => (
+                                            <tr key={item.ID || index} className="border-t border-border hover:bg-muted/50">
+                                              <td className="py-2 px-3">{item.ID}</td>
+                                              <td className="py-2 px-3">{item.customer_user}</td>
+                                              <td className="py-2 px-3">
+                                                {item.shipping_details._shipping_first_name} {item.shipping_details._shipping_last_name || ''}
+                                              </td>
+                                              <td className="py-2 px-3">
+                                                {item.shipping_details._shipping_phone || item.billing_details?._billing_phone || '-'}
+                                              </td>
+                                              <td className="py-2 px-3">
+                                                <Badge variant="secondary">{item.puncte || 0}</Badge>
+                                              </td>
+                                              <td className="py-2 px-3">{item.total_comenzi || 0}</td>
+                                            </tr>
+                                          ))
+                                        ) : (
+                                          <tr className="border-t border-border">
+                                            <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                                              Nu există date de puncte pentru acest client.
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+
+                                  {/* Additional info if available */}
+                                  {puncteData.length > 0 && puncteData[0].data_ultima_comanda && (
+                                    <div className="p-3 bg-muted/20 rounded-md">
+                                      <p className="text-sm text-muted-foreground">
+                                        <span className="font-medium">Data ultimei comenzi:</span> {puncteData[0].data_ultima_comanda}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                         )}
 
@@ -2648,6 +3148,23 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                     >
                       SMS
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNotesTab('puncte');
+                        // Fetch points history when Puncte tab is clicked
+                        if (confirmOrder?.customer_user) {
+                          fetchPuncteHistory(confirmOrder.customer_user);
+                        }
+                      }}
+                      className={`px-3 py-2 text-sm font-medium ${
+                        activeNotesTab === 'puncte'
+                          ? 'border-b-2 border-primary text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Puncte
+                    </button>
                   </div>
 
                   {/* Notes tab content */}
@@ -2855,6 +3372,161 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
                                 <tr className="border-t border-border">
                                   <td colSpan={2} className="py-4 text-center text-muted-foreground">
                                     Nu există mesaje SMS pentru acest client.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Puncte tab content */}
+                  {activeNotesTab === 'puncte' && (
+                    <div className="flex flex-col flex-grow">
+                      {/* Error and Success Messages */}
+                      {puncteHistoryError && (
+                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                          {puncteHistoryError}
+                        </div>
+                      )}
+                      {puncteAddError && (
+                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                          {puncteAddError}
+                        </div>
+                      )}
+                      {puncteAddSuccess && (
+                        <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-md mb-4">
+                          {puncteAddSuccess}
+                        </div>
+                      )}
+
+                      {/* Total Points Display */}
+                      <div className="mb-4  bg-muted/20 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Total puncte:</span>
+                          <Badge variant="secondary" className="text-lg px-3 py-1">
+                            {puncteHistory.reduce((total, item) => total + item.points, 0)}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Add Points Form */}
+                      <div className="flex flex-col space-y-2 mb-4">
+                        {/* Input fields on one row */}
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <input
+                              id="puncteInput"
+                              type="number"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Numărul de puncte..."
+                              value={puncteInput}
+                              onChange={(e) => setPuncteInput(e.target.value)}
+                              disabled={addingPuncte}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              id="motivInput"
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Motivul..."
+                              value={motivInput}
+                              onChange={(e) => setMotivInput(e.target.value)}
+                              disabled={addingPuncte}
+                            />
+                          </div>
+                        </div>
+                        {/* Send button on next row, full width */}
+                        <Button
+                          onClick={addPuncte}
+                          disabled={addingPuncte || !puncteInput.trim() || !motivInput.trim()}
+                          className="w-full"
+                        >
+                          {addingPuncte ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Se adaugă...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Send
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Points history table with scroll */}
+                      <div className="border border-border rounded-md overflow-hidden flex-grow min-h-0">
+                        <div className="overflow-y-auto h-full">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted sticky top-0">
+                              <tr>
+
+                                <th className="py-2 px-3 text-center font-medium">Puncte</th>
+                                <th className="py-2 px-3 text-center font-medium">Comandă</th>
+                                <th className="py-2 px-3 text-right font-medium">Data</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {loadingPuncteHistory ? (
+                                <tr className="border-t border-border">
+                                  <td colSpan={5} className="py-8 text-center">
+                                    <div className="flex items-center justify-center">
+                                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+                                      <span className="text-muted-foreground">Se încarcă istoricul punctelor...</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : puncteHistory.length > 0 ? (
+                                puncteHistory.map((item) => (
+                                  <tr key={item.id} className="border-t border-border hover:bg-muted/50">
+
+                                    <td className="py-2 px-3 text-center">
+                                      <Badge variant={item.points > 0 ? 'success' : 'destructive'}>
+                                        {item.points > 0 ? '+' : ''}{item.points}
+                                      </Badge>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      {item.order_id && (
+                                          <span className="font-mono text-xs">
+                                        <a href={`https://darurialese.com/wp-admin/post.php?post=${item.order_id}&action=edit`} target="_blank" className="text-primary hover:underline">
+                                          #{item.order_id}
+                                        </a> <br></br>
+                                        </span>
+                                      )}
+
+                                      <div className="text-[12px] px-2 py-1 bg-muted rounded w-full">
+                                        {item.type}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-2 px-3 text-right text-xs ">
+                                      <div className="flex flex-col items-end gap-1">
+                                        <div>
+                                          {new Date(item.date).toLocaleDateString('ro-RO', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric'
+                                          })}
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">
+                                          {new Date(item.date).toLocaleTimeString('ro-RO', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </Badge>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr className="border-t border-border">
+                                  <td colSpan={5} className="py-4 text-center text-muted-foreground">
+                                    Nu există istoric de puncte pentru acest client.
                                   </td>
                                 </tr>
                               )}

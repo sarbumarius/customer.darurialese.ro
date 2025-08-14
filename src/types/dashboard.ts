@@ -71,7 +71,7 @@ export interface Comanda {
   data_comanda?: string; // convenience date/time for UI
   awb_curier?: string; // AWB (tracking) code from API
   fara_factura_in_colet?: number | string | boolean; // 1 => cadou (gift), show icon in UI
-
+  customer_user: number; // User ID of the customer
   shipping_details: {
     _shipping_first_name: string;
     _shipping_last_name: string;
