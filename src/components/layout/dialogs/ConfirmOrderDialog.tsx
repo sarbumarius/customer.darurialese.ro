@@ -14,7 +14,7 @@ import ConfirmationSelects from "@/components/content/ConfirmationSelects";
 import ProductPersonalizationCard from "@/components/content/ProductPersonalizationCard";
 import OrderSummary from "@/components/content/OrderSummary";
 import GiftsSlider from "@/components/content/GiftsSlider";
-import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users, ChevronRight, Check } from "lucide-react";
+import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users, ChevronRight, Check, ChevronUp } from "lucide-react";
 import type { Comanda } from "@/types/dashboard";
 
 // Interface for SMS message
@@ -292,6 +292,12 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
     county: string;
     checked: boolean;
   } | null>(null);
+
+  // State for scroll-to-top button
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+
+  // Ref for the scrollable container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Refs for accessing the GooglePlacesAutocomplete values
   const shippingAddressRef = useRef<{ getValue: () => string }>(null);
@@ -1745,6 +1751,35 @@ Echipa Daruri Alese`;
     });
   };
 
+  // Scroll event handler for scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+        const scrollPercentage = (scrollTop / (scrollHeight - clientHeight)) * 100;
+
+        // Show button when scrolled 10% or more
+        setShowScrollToTop(scrollPercentage >= 10);
+      }
+    };
+
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll);
+      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
+
+  // Function to scroll to top
+  const scrollToTop = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   // Wizard step completion logic
   const getWizardStepStatus = () => {
     const steps = [
@@ -1959,13 +1994,13 @@ Echipa Daruri Alese`;
         </div>
 
         {/* Main content area with 4 columns */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-10 gap-4 max-w-[1800px] mx-auto">
+        <div className="flex-1 overflow-y-auto p-4 coloane3elemente">
+          <div className="grid grid-cols-10 gap-4 max-w-[1800px] mx-auto subcoloane3elemente h-full">
 
 
 
             {/* Left column (18.75%) - Client data & logistics */}
-            <div className="col-span-2 space-y-4">
+            <div className="no-scrollbar h-full overflow-y-auto col-span-2 space-y-4">
 
               {/* Payment Method Card */}
 
@@ -2596,854 +2631,854 @@ Echipa Daruri Alese`;
             </div>
 
 
+            <div className="no-scrollbar h-full col-span-6 grid-cols-2 grid gap-2 overflow-y-auto coloanaCentrala">
+              {/* Center column (25%) - Confirmation & production options */}
+              <div className="no-scrollbar h-full space-y-4 overflow-y-auto ">
 
-            {/* Center column (25%) - Confirmation & production options */}
-            <div className="col-span-3 space-y-4">
-
-              <div className="w-full hartaAfisata">
-                <LoadScript 
-                  googleMapsApiKey="AIzaSyA1B8WNJx5X5S9tqN-hdyiZyrEwOcUpZvM" 
-                  libraries={libraries}
-                >
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    {mapLocation ? (
-                      <>
-                        <div className="bg-muted px-4 py-2 border-b border-border">
-                          <h3 className="font-medium text-sm">📍 {mapLocation.address}</h3>
+                <div className="w-full hartaAfisata">
+                  <LoadScript 
+                    googleMapsApiKey="AIzaSyA1B8WNJx5X5S9tqN-hdyiZyrEwOcUpZvM" 
+                    libraries={libraries}
+                  >
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      {mapLocation ? (
+                        <>
+                          <div className="bg-muted px-4 py-2 border-b border-border">
+                            <h3 className="font-medium text-sm">📍 {mapLocation.address}</h3>
+                          </div>
+                          <GoogleMap 
+                            mapContainerStyle={mapContainerStyle} 
+                            center={{ lat: mapLocation.lat, lng: mapLocation.lng }} 
+                            zoom={16}
+                          >
+                            <Marker
+                              position={{ lat: mapLocation.lat, lng: mapLocation.lng }}
+                              title={mapLocation.address}
+                            />
+                          </GoogleMap>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-center h-[300px] bg-muted/20 text-muted-foreground">
+                          <div className="text-center">
+                            <div className="text-2xl mb-2">🗺️</div>
+                            <p className="text-sm">Selectează o adresă pentru a afișa harta</p>
+                          </div>
                         </div>
-                        <GoogleMap 
-                          mapContainerStyle={mapContainerStyle} 
-                          center={{ lat: mapLocation.lat, lng: mapLocation.lng }} 
-                          zoom={16}
-                        >
-                          <Marker
-                            position={{ lat: mapLocation.lat, lng: mapLocation.lng }}
-                            title={mapLocation.address}
-                          />
-                        </GoogleMap>
-                      </>
+                      )}
+                    </div>
+                  </LoadScript>
+                </div>
+
+                {/* Courier Additional Kilometers Check - 3 Rows */}
+                <div className="border border-border rounded-lg p-4 bg-background ">
+                  <div className="mb-3">
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium">Localitate:</span> {fanCourierKmCheck?.locality || samedayKmCheck?.locality || "Selectează o adresă"} <span className="font-medium">Județ:</span> {fanCourierKmCheck?.county || samedayKmCheck?.county || ""}
+                    </p>
+                  </div>
+
+                  <div className="gap-3 grid grid-cols-3">
+                    {/* DPD - Always available */}
+                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                      <img 
+                        src="/curieri/dpd.jpg" 
+                        alt="DPD" 
+                        className="w-12 h-8 object-contain"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="text-green-600 text-lg">✓</div>
+                        <span className="text-sm font-medium">0 km</span>
+                      </div>
+                    </div>
+
+                    {/* FanCourier */}
+                    {fanCourierKmCheck && fanCourierKmCheck.checked ? (
+                      <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                        <img 
+                          src="/curieri/fan.jpg" 
+                          alt="FanCourier" 
+                          className="w-12 h-8 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          {fanCourierKmCheck.hasAdditionalKm ? (
+                            <>
+                              <div className="text-red-600 text-lg">✗</div>
+                              <span className="text-sm font-medium">{fanCourierKmCheck.kmValue} km</span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-green-600 text-lg">✓</div>
+                              <span className="text-sm font-medium">0 km</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="flex items-center justify-center h-[300px] bg-muted/20 text-muted-foreground">
-                        <div className="text-center">
-                          <div className="text-2xl mb-2">🗺️</div>
-                          <p className="text-sm">Selectează o adresă pentru a afișa harta</p>
+                      <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                        <img 
+                          src="/curieri/fan.jpg" 
+                          alt="FanCourier" 
+                          className="w-12 h-8 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          <div className="text-green-600 text-lg">✓</div>
+                          <span className="text-sm font-medium">0 km</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SameDay */}
+                    {samedayKmCheck && samedayKmCheck.checked ? (
+                      <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                        <img 
+                          src="/curieri/sameday.jpg" 
+                          alt="SameDay" 
+                          className="w-12 h-8 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          {samedayKmCheck.hasAdditionalKm ? (
+                            <>
+                              <div className="text-red-600 text-lg">✗</div>
+                              <span className="text-sm font-medium">{samedayKmCheck.kmValue} km</span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-green-600 text-lg">✓</div>
+                              <span className="text-sm font-medium">0 km</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
+                        <img 
+                          src="/curieri/sameday.jpg" 
+                          alt="SameDay" 
+                          className="w-12 h-8 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          <div className="text-green-600 text-lg">✓</div>
+                          <span className="text-sm font-medium">0 km</span>
                         </div>
                       </div>
                     )}
                   </div>
-                </LoadScript>
-              </div>
-
-              {/* Courier Additional Kilometers Check - 3 Rows */}
-              <div className="border border-border rounded-lg p-4 bg-background ">
-                <div className="mb-3">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium">Localitate:</span> {fanCourierKmCheck?.locality || samedayKmCheck?.locality || "Selectează o adresă"} <span className="font-medium">Județ:</span> {fanCourierKmCheck?.county || samedayKmCheck?.county || ""}
-                  </p>
                 </div>
 
-                <div className="gap-3 grid grid-cols-3">
-                  {/* DPD - Always available */}
-                  <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
-                    <img 
-                      src="/curieri/dpd.jpg" 
-                      alt="DPD" 
-                      className="w-12 h-8 object-contain"
-                    />
-                    <div className="flex items-center gap-2">
-                      <div className="text-green-600 text-lg">✓</div>
-                      <span className="text-sm font-medium">0 km</span>
-                    </div>
-                  </div>
-
-                  {/* FanCourier */}
-                  {fanCourierKmCheck && fanCourierKmCheck.checked ? (
-                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
-                      <img 
-                        src="/curieri/fan.jpg" 
-                        alt="FanCourier" 
-                        className="w-12 h-8 object-contain"
-                      />
-                      <div className="flex items-center gap-2">
-                        {fanCourierKmCheck.hasAdditionalKm ? (
-                          <>
-                            <div className="text-red-600 text-lg">✗</div>
-                            <span className="text-sm font-medium">{fanCourierKmCheck.kmValue} km</span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-green-600 text-lg">✓</div>
-                            <span className="text-sm font-medium">0 km</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
-                      <img 
-                        src="/curieri/fan.jpg" 
-                        alt="FanCourier" 
-                        className="w-12 h-8 object-contain"
-                      />
-                      <div className="flex items-center gap-2">
-                        <div className="text-green-600 text-lg">✓</div>
-                        <span className="text-sm font-medium">0 km</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SameDay */}
-                  {samedayKmCheck && samedayKmCheck.checked ? (
-                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
-                      <img 
-                        src="/curieri/sameday.jpg" 
-                        alt="SameDay" 
-                        className="w-12 h-8 object-contain"
-                      />
-                      <div className="flex items-center gap-2">
-                        {samedayKmCheck.hasAdditionalKm ? (
-                          <>
-                            <div className="text-red-600 text-lg">✗</div>
-                            <span className="text-sm font-medium">{samedayKmCheck.kmValue} km</span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-green-600 text-lg">✓</div>
-                            <span className="text-sm font-medium">0 km</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background">
-                      <img 
-                        src="/curieri/sameday.jpg" 
-                        alt="SameDay" 
-                        className="w-12 h-8 object-contain"
-                      />
-                      <div className="flex items-center gap-2">
-                        <div className="text-green-600 text-lg">✓</div>
-                        <span className="text-sm font-medium">0 km</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Top tabs */}
-              <div className="bg-background border-b border-border">
+                {/* Top tabs */}
+                <div className="bg-background border-b border-border">
 
 
-                {/* Tab content */}
-                <div className=" max-w-[1800px] mx-auto">
-                  {activeTopTab === 'tab1' && (
-                      <Card className="p-4">
-                        {activeConfirmTab === 'confirmare' && (
-                            <>
-                              <div>
-                                {confirmOrder?.confirmare_comanda && (
-                                    <h3 className="font-semibold text-lg mb-4">Confirmata la data {formatDate(confirmOrder.confirmare_comanda)}</h3>
-                                )}
-                              </div>
-                              {/* Reason selection and add button */}
-                              <div className="border border-border rounded-md p-4 mb-4 bg-yellow-50">
-                                {/* Error and Success Messages */}
-                                {motiveError && (
-                                  <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
-                                    {motiveError}
-                                  </div>
-                                )}
-                                {motiveSuccess && (
-                                  <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-md mb-4">
-                                    {motiveSuccess}
-                                  </div>
-                                )}
-                                <div className="mb-4">
-                                  <Label htmlFor="reason" className="block mb-2">Motiv</Label>
-                                  <div className="grid-cols-1 grid gap-3">
-                                    <select
-                                        id="reason"
-                                        className="p-2 border border-border rounded-md bg-background text-foreground"
-                                        value={selectedReason}
-                                        onChange={(e) => setSelectedReason(e.target.value)}
-                                        disabled={addingMotive}
-                                    >
-                                      <option value="Selecteaza">Selectează</option>
-                                      <option value="Clientul nu raspunde">Clientul nu răspunde</option>
-                                      <option value="Telefon inchis">Telefon închis</option>
-                                      <option value="Telefonul nu suna">Telefonul nu sună</option>
-                                      <option value="Numar gresit">Număr greșit</option>
-                                      <option value="Linie ocupata">Linie ocupată</option>
-                                      <option value="Apel respins">Apel respins</option>
-                                      <option value="Amanare confirmare">Amânare confirmare</option>
-                                    </select>
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={addMotivNeconfirmare}
-                                      disabled={addingMotive || selectedReason === "Selecteaza"}
-                                    >
-                                      {addingMotive ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                          Se adaugă...
-                                        </>
-                                      ) : (
-                                        "Adaugă motiv neconfirmare"
-                                      )}
-                                    </Button>
-                                  </div>
+                  {/* Tab content */}
+                  <div className=" max-w-[1800px] mx-auto">
+                    {activeTopTab === 'tab1' && (
+                        <Card className="p-4">
+                          {activeConfirmTab === 'confirmare' && (
+                              <>
+                                <div>
+                                  {confirmOrder?.confirmare_comanda && (
+                                      <h3 className="font-semibold text-lg mb-4">Confirmata la data {formatDate(confirmOrder.confirmare_comanda)}</h3>
+                                  )}
                                 </div>
-                                <div className="mb-4">
-                                  <div className="flex justify-between items-center mb-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setIsMotiveHistoryCollapsed(!isMotiveHistoryCollapsed)}
-                                      className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
-                                    >
-                                      <span>Istoric motive neconfirmare ({localMotives.length} {localMotives.length === 1 ? 'încercare' : 'încercări'})</span>
-                                      <svg 
-                                        className={`w-4 h-4 transition-transform ${isMotiveHistoryCollapsed ? 'rotate-0' : 'rotate-180'}`}
-                                        fill="none" 
-                                        stroke="currentColor" 
-                                        viewBox="0 0 24 24"
+                                {/* Reason selection and add button */}
+                                <div className="border border-border rounded-md p-4 mb-4 bg-yellow-50">
+                                  {/* Error and Success Messages */}
+                                  {motiveError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md mb-4">
+                                      {motiveError}
+                                    </div>
+                                  )}
+                                  {motiveSuccess && (
+                                    <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded-md mb-4">
+                                      {motiveSuccess}
+                                    </div>
+                                  )}
+                                  <div className="mb-4">
+                                    <Label htmlFor="reason" className="block mb-2">Motiv</Label>
+                                    <div className="grid-cols-1 grid gap-3">
+                                      <select
+                                          id="reason"
+                                          className="p-2 border border-border rounded-md bg-background text-foreground"
+                                          value={selectedReason}
+                                          onChange={(e) => setSelectedReason(e.target.value)}
+                                          disabled={addingMotive}
                                       >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                      </svg>
-                                    </button>
-                                    {/* Show "Mută în anulate" button only when there are 3 or more active reasons */}
-                                    {localMotives.length >= 3 && (
-                                      <Button
-                                        variant="destructive"
+                                        <option value="Selecteaza">Selectează</option>
+                                        <option value="Clientul nu raspunde">Clientul nu răspunde</option>
+                                        <option value="Telefon inchis">Telefon închis</option>
+                                        <option value="Telefonul nu suna">Telefonul nu sună</option>
+                                        <option value="Numar gresit">Număr greșit</option>
+                                        <option value="Linie ocupata">Linie ocupată</option>
+                                        <option value="Apel respins">Apel respins</option>
+                                        <option value="Amanare confirmare">Amânare confirmare</option>
+                                      </select>
+                                      <Button 
+                                        variant="outline" 
                                         size="sm"
-                                        className="text-xs"
-                                        onClick={() => {
-                                          // Logic to move the order to canceled
-                                          console.log('Moving order to canceled:', confirmOrder?.ID);
-                                        }}
+                                        onClick={addMotivNeconfirmare}
+                                        disabled={addingMotive || selectedReason === "Selecteaza"}
                                       >
-                                        Mută în anulate
+                                        {addingMotive ? (
+                                          <>
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                            Se adaugă...
+                                          </>
+                                        ) : (
+                                          "Adaugă motiv neconfirmare"
+                                        )}
                                       </Button>
+                                    </div>
+                                  </div>
+                                  <div className="mb-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setIsMotiveHistoryCollapsed(!isMotiveHistoryCollapsed)}
+                                        className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
+                                      >
+                                        <span>Istoric motive neconfirmare ({localMotives.length} {localMotives.length === 1 ? 'încercare' : 'încercări'})</span>
+                                        <svg 
+                                          className={`w-4 h-4 transition-transform ${isMotiveHistoryCollapsed ? 'rotate-0' : 'rotate-180'}`}
+                                          fill="none" 
+                                          stroke="currentColor" 
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                      </button>
+                                      {/* Show "Mută în anulate" button only when there are 3 or more active reasons */}
+                                      {localMotives.length >= 3 && (
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          className="text-xs"
+                                          onClick={() => {
+                                            // Logic to move the order to canceled
+                                            console.log('Moving order to canceled:', confirmOrder?.ID);
+                                          }}
+                                        >
+                                          Mută în anulate
+                                        </Button>
+                                      )}
+                                    </div>
+                                    {!isMotiveHistoryCollapsed && (
+                                      <div className="border border-border rounded-md overflow-hidden">
+                                        <table className="w-full text-sm">
+                                          <thead className="bg-muted">
+                                          <tr>
+                                            <th className="py-2 px-3 text-left font-medium w-10">#</th>
+                                            <th className="py-2 px-3 text-left font-medium">Motiv</th>
+                                            <th className="py-2 px-3 text-right font-medium">Data</th>
+                                            <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
+                                          </tr>
+                                          </thead>
+                                          <tbody>
+                                          {localMotives.length > 0 ? (
+                                            localMotives.map((motive, index) => (
+                                              <tr key={`${motive.data_si_ora}-${index}`} className="border-t border-border">
+                                                <td className="py-2 px-3 text-center">{index + 1}</td>
+                                                <td className="py-2 px-3">{motive.motiv_neconfirmare}</td>
+                                                <td className="py-2 px-3 text-right text-muted-foreground">
+                                                  {motive.data_si_ora}
+                                                </td>
+                                                <td className="py-2 px-3 text-center">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={() => deleteMotivNeconfirmare(index)}
+                                                    disabled={deletingMotive === index}
+                                                    title="Șterge motiv"
+                                                  >
+                                                    {deletingMotive === index ? (
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                      <X className="h-3 w-3" />
+                                                    )}
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            ))
+                                          ) : (
+                                            <tr className="border-t border-border">
+                                              <td colSpan={4} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
+                                            </tr>
+                                          )}
+                                          </tbody>
+                                        </table>
+                                      </div>
                                     )}
                                   </div>
-                                  {!isMotiveHistoryCollapsed && (
+                                </div>
+                              </>
+                          )}
+
+                          {/* SMS tab content */}
+                          {activeConfirmTab === 'sms' && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h3 className="font-semibold text-lg">Mesaje SMS</h3>
+                                  <div className="text-sm text-muted-foreground">
+                                    {confirmOrder?.billing_details?._billing_phone ? (
+                                        <span>Telefon: {confirmOrder.billing_details._billing_phone}</span>
+                                    ) : (
+                                        <span className="text-red-500">Număr de telefon lipsă</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="border border-border rounded-md p-4 mb-4">
+                                  <div className="space-y-4">
+                                    {/* Error message */}
+                                    {smsError && (
+                                        <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md">
+                                          {smsError}
+                                        </div>
+                                    )}
+
+                                    {/* SMS messages table */}
                                     <div className="border border-border rounded-md overflow-hidden">
                                       <table className="w-full text-sm">
                                         <thead className="bg-muted">
                                         <tr>
-                                          <th className="py-2 px-3 text-left font-medium w-10">#</th>
-                                          <th className="py-2 px-3 text-left font-medium">Motiv</th>
-                                          <th className="py-2 px-3 text-right font-medium">Data</th>
-                                          <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
+                                          <th className="py-2 px-3 text-left font-medium">Mesaj</th>
+                                          <th className="py-2 px-3 text-right font-medium w-32">Data</th>
                                         </tr>
                                         </thead>
                                         <tbody>
-                                        {localMotives.length > 0 ? (
-                                          localMotives.map((motive, index) => (
-                                            <tr key={`${motive.data_si_ora}-${index}`} className="border-t border-border">
-                                              <td className="py-2 px-3 text-center">{index + 1}</td>
-                                              <td className="py-2 px-3">{motive.motiv_neconfirmare}</td>
-                                              <td className="py-2 px-3 text-right text-muted-foreground">
-                                                {motive.data_si_ora}
-                                              </td>
-                                              <td className="py-2 px-3 text-center">
-                                                <Button
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                  onClick={() => deleteMotivNeconfirmare(index)}
-                                                  disabled={deletingMotive === index}
-                                                  title="Șterge motiv"
-                                                >
-                                                  {deletingMotive === index ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                  ) : (
-                                                    <X className="h-3 w-3" />
-                                                  )}
-                                                </Button>
+                                        {loadingSms ? (
+                                            <tr className="border-t border-border">
+                                              <td colSpan={2} className="py-8 text-center">
+                                                <div className="flex items-center justify-center">
+                                                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+                                                  <span className="text-muted-foreground">Se încarcă mesajele SMS...</span>
+                                                </div>
                                               </td>
                                             </tr>
-                                          ))
+                                        ) : smsMessages.length > 0 ? (
+                                            smsMessages.map((sms) => (
+                                                <tr key={sms.id} className="border-t border-border">
+                                                  <td className="py-2 px-3">
+                                                    {/* Decode URL-encoded message */}
+                                                    {decodeURIComponent(sms.message.replace(/\+/g, ' '))}
+                                                  </td>
+                                                  <td className="py-2 px-3 text-right text-muted-foreground">
+                                                    {new Date(sms.created_at).toLocaleDateString('ro-RO', {
+                                                      year: 'numeric',
+                                                      month: 'short',
+                                                      day: 'numeric',
+                                                      hour: '2-digit',
+                                                      minute: '2-digit'
+                                                    })}
+                                                  </td>
+                                                </tr>
+                                            ))
                                         ) : (
-                                          <tr className="border-t border-border">
-                                            <td colSpan={4} className="py-2 px-3 text-center text-muted-foreground">Nu există motive de neconfirmare</td>
-                                          </tr>
+                                            <tr className="border-t border-border">
+                                              <td colSpan={2} className="py-4 text-center text-muted-foreground">
+                                                Nu există mesaje SMS pentru acest client.
+                                              </td>
+                                            </tr>
                                         )}
                                         </tbody>
                                       </table>
                                     </div>
-                                  )}
-                                </div>
-                              </div>
-                            </>
-                        )}
 
-                        {/* SMS tab content */}
-                        {activeConfirmTab === 'sms' && (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h3 className="font-semibold text-lg">Mesaje SMS</h3>
-                                <div className="text-sm text-muted-foreground">
-                                  {confirmOrder?.billing_details?._billing_phone ? (
-                                      <span>Telefon: {confirmOrder.billing_details._billing_phone}</span>
-                                  ) : (
-                                      <span className="text-red-500">Număr de telefon lipsă</span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="border border-border rounded-md p-4 mb-4">
-                                <div className="space-y-4">
-                                  {/* Error message */}
-                                  {smsError && (
-                                      <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md">
-                                        {smsError}
+                                    {/* SMS sending form */}
+                                    <div className="flex flex-col space-y-2">
+                                      <textarea
+                                          id="smsMessage"
+                                          className="w-full p-2 border border-border rounded-md min-h-[100px] resize-none"
+                                          placeholder="Scrie mesajul SMS aici..."
+                                          value={smsText}
+                                          onChange={(e) => setSmsText(e.target.value)}
+                                          disabled={loadingSms}
+                                      />
+                                      <div className="flex justify-between items-center">
+                                        <div className="text-xs text-muted-foreground">
+                                          {smsText.length} caractere
+                                        </div>
+                                        <Button
+                                            onClick={sendSmsMessage}
+                                            disabled={loadingSms || !smsText.trim() || !selectedSmsPhone}
+                                            className="self-end"
+                                        >
+                                          {loadingSms ? (
+                                              <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Se trimite...
+                                              </>
+                                          ) : (
+                                              <>
+                                                <Send className="h-4 w-4 mr-2" />
+                                                Trimite SMS
+                                              </>
+                                          )}
+                                        </Button>
                                       </div>
-                                  )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                          )}
 
-                                  {/* SMS messages table */}
-                                  <div className="border border-border rounded-md overflow-hidden">
-                                    <table className="w-full text-sm">
-                                      <thead className="bg-muted">
-                                      <tr>
-                                        <th className="py-2 px-3 text-left font-medium">Mesaj</th>
-                                        <th className="py-2 px-3 text-right font-medium w-32">Data</th>
-                                      </tr>
-                                      </thead>
-                                      <tbody>
-                                      {loadingSms ? (
-                                          <tr className="border-t border-border">
-                                            <td colSpan={2} className="py-8 text-center">
-                                              <div className="flex items-center justify-center">
-                                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
-                                                <span className="text-muted-foreground">Se încarcă mesajele SMS...</span>
-                                              </div>
-                                            </td>
+                          {activeConfirmTab === 'puncte' && (
+                              <div>
+                                <h3 className="font-semibold text-lg mb-4">Puncte</h3>
+
+                                {/* Error message */}
+                                {puncteError && (
+                                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-red-600 text-sm">{puncteError}</p>
+                                  </div>
+                                )}
+
+                                {/* Loading state */}
+                                {loadingPuncte ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span className="text-muted-foreground">Se încarcă datele de puncte...</span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-4">
+                                    {/* Points data table */}
+                                    <div className="border border-border rounded-md overflow-hidden">
+                                      <table className="w-full text-sm">
+                                        <thead className="bg-muted">
+                                          <tr>
+                                            <th className="py-2 px-3 text-left font-medium">ID</th>
+                                            <th className="py-2 px-3 text-left font-medium">Customer User</th>
+                                            <th className="py-2 px-3 text-left font-medium">Nume</th>
+                                            <th className="py-2 px-3 text-left font-medium">Telefon</th>
+                                            <th className="py-2 px-3 text-left font-medium">Puncte</th>
+                                            <th className="py-2 px-3 text-left font-medium">Total Comenzi</th>
                                           </tr>
-                                      ) : smsMessages.length > 0 ? (
-                                          smsMessages.map((sms) => (
-                                              <tr key={sms.id} className="border-t border-border">
+                                        </thead>
+                                        <tbody>
+                                          {puncteData.length > 0 ? (
+                                            puncteData.map((item, index) => (
+                                              <tr key={item.ID || index} className="border-t border-border hover:bg-muted/50">
+                                                <td className="py-2 px-3">{item.ID}</td>
+                                                <td className="py-2 px-3">{item.customer_user}</td>
                                                 <td className="py-2 px-3">
-                                                  {/* Decode URL-encoded message */}
-                                                  {decodeURIComponent(sms.message.replace(/\+/g, ' '))}
+                                                  {item.shipping_details._shipping_first_name} {item.shipping_details._shipping_last_name || ''}
                                                 </td>
-                                                <td className="py-2 px-3 text-right text-muted-foreground">
-                                                  {new Date(sms.created_at).toLocaleDateString('ro-RO', {
-                                                    year: 'numeric',
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                  })}
+                                                <td className="py-2 px-3">
+                                                  {item.shipping_details._shipping_phone || item.billing_details?._billing_phone || '-'}
                                                 </td>
+                                                <td className="py-2 px-3">
+                                                  <Badge variant="secondary">{item.puncte || 0}</Badge>
+                                                </td>
+                                                <td className="py-2 px-3">{item.total_comenzi || 0}</td>
                                               </tr>
-                                          ))
-                                      ) : (
-                                          <tr className="border-t border-border">
-                                            <td colSpan={2} className="py-4 text-center text-muted-foreground">
-                                              Nu există mesaje SMS pentru acest client.
-                                            </td>
-                                          </tr>
-                                      )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-
-                                  {/* SMS sending form */}
-                                  <div className="flex flex-col space-y-2">
-                                    <textarea
-                                        id="smsMessage"
-                                        className="w-full p-2 border border-border rounded-md min-h-[100px] resize-none"
-                                        placeholder="Scrie mesajul SMS aici..."
-                                        value={smsText}
-                                        onChange={(e) => setSmsText(e.target.value)}
-                                        disabled={loadingSms}
-                                    />
-                                    <div className="flex justify-between items-center">
-                                      <div className="text-xs text-muted-foreground">
-                                        {smsText.length} caractere
-                                      </div>
-                                      <Button
-                                          onClick={sendSmsMessage}
-                                          disabled={loadingSms || !smsText.trim() || !selectedSmsPhone}
-                                          className="self-end"
-                                      >
-                                        {loadingSms ? (
-                                            <>
-                                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                              Se trimite...
-                                            </>
-                                        ) : (
-                                            <>
-                                              <Send className="h-4 w-4 mr-2" />
-                                              Trimite SMS
-                                            </>
-                                        )}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                        )}
-
-                        {activeConfirmTab === 'puncte' && (
-                            <div>
-                              <h3 className="font-semibold text-lg mb-4">Puncte</h3>
-
-                              {/* Error message */}
-                              {puncteError && (
-                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                                  <p className="text-red-600 text-sm">{puncteError}</p>
-                                </div>
-                              )}
-
-                              {/* Loading state */}
-                              {loadingPuncte ? (
-                                <div className="flex items-center justify-center py-8">
-                                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                  <span className="text-muted-foreground">Se încarcă datele de puncte...</span>
-                                </div>
-                              ) : (
-                                <div className="space-y-4">
-                                  {/* Points data table */}
-                                  <div className="border border-border rounded-md overflow-hidden">
-                                    <table className="w-full text-sm">
-                                      <thead className="bg-muted">
-                                        <tr>
-                                          <th className="py-2 px-3 text-left font-medium">ID</th>
-                                          <th className="py-2 px-3 text-left font-medium">Customer User</th>
-                                          <th className="py-2 px-3 text-left font-medium">Nume</th>
-                                          <th className="py-2 px-3 text-left font-medium">Telefon</th>
-                                          <th className="py-2 px-3 text-left font-medium">Puncte</th>
-                                          <th className="py-2 px-3 text-left font-medium">Total Comenzi</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {puncteData.length > 0 ? (
-                                          puncteData.map((item, index) => (
-                                            <tr key={item.ID || index} className="border-t border-border hover:bg-muted/50">
-                                              <td className="py-2 px-3">{item.ID}</td>
-                                              <td className="py-2 px-3">{item.customer_user}</td>
-                                              <td className="py-2 px-3">
-                                                {item.shipping_details._shipping_first_name} {item.shipping_details._shipping_last_name || ''}
+                                            ))
+                                          ) : (
+                                            <tr className="border-t border-border">
+                                              <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                                                Nu există date de puncte pentru acest client.
                                               </td>
-                                              <td className="py-2 px-3">
-                                                {item.shipping_details._shipping_phone || item.billing_details?._billing_phone || '-'}
-                                              </td>
-                                              <td className="py-2 px-3">
-                                                <Badge variant="secondary">{item.puncte || 0}</Badge>
-                                              </td>
-                                              <td className="py-2 px-3">{item.total_comenzi || 0}</td>
                                             </tr>
-                                          ))
-                                        ) : (
-                                          <tr className="border-t border-border">
-                                            <td colSpan={6} className="py-4 text-center text-muted-foreground">
-                                              Nu există date de puncte pentru acest client.
-                                            </td>
-                                          </tr>
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-
-                                  {/* Additional info if available */}
-                                  {puncteData.length > 0 && puncteData[0].data_ultima_comanda && (
-                                    <div className="p-3 bg-muted/20 rounded-md">
-                                      <p className="text-sm text-muted-foreground">
-                                        <span className="font-medium">Data ultimei comenzi:</span> {puncteData[0].data_ultima_comanda}
-                                      </p>
+                                          )}
+                                        </tbody>
+                                      </table>
                                     </div>
-                                  )}
-                                </div>
-                              )}
+
+                                    {/* Additional info if available */}
+                                    {puncteData.length > 0 && puncteData[0].data_ultima_comanda && (
+                                      <div className="p-3 bg-muted/20 rounded-md">
+                                        <p className="text-sm text-muted-foreground">
+                                          <span className="font-medium">Data ultimei comenzi:</span> {puncteData[0].data_ultima_comanda}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                          )}
+
+                          {activeConfirmTab === 'persoane' && (
+                              <div>
+                                <h3 className="font-semibold text-lg mb-4">Persoane apropiate</h3>
+                                <p className="text-muted-foreground">Conținutul pentru tab-ul Persoane apropiate va fi implementat ulterior.</p>
+                              </div>
+                          )}
+
+
+                          {/* Client mood section */}
+
+                          <div className="w-full">
+                            <div className="grid grid-cols-7 gap-1">
+                              <button 
+                                onClick={() => handleClientMoodChange("angry")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Recalcitrant" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "angry" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-angry"></i>
+                              </button>
+                              <button 
+                                onClick={() => handleClientMoodChange("dizzy")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="IQ mic" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "dizzy" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-dizzy"></i>
+                              </button>
+                              <button 
+                                onClick={() => handleClientMoodChange("grin-hearts")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Dragut" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-hearts" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-grin-hearts"></i>
+                              </button>
+                              <button 
+                                onClick={() => handleClientMoodChange("frown")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Morocanos" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "frown" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-frown"></i>
+                              </button>
+                              <button 
+                                onClick={() => handleClientMoodChange("meh-rolling-eyes")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Pretentios" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "meh-rolling-eyes" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-meh-rolling-eyes"></i>
+                              </button>
+                              <button 
+                                onClick={() => handleClientMoodChange("meh")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Indiferent" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "meh" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-meh"></i>
+                              </button>
+                              {/* Debug: {clientMood} */}
+                              <button 
+                                onClick={() => handleClientMoodChange("grin-squint")}
+                                data-toggle="tooltip" 
+                                data-placement="top" 
+                                title="Amuzat" 
+                                className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-squint" ? 'bg-green-500 border-green-500 text-white' : ''}`}
+                              >
+                                <i className="fas fa-grin-squint"></i>
+                              </button>
                             </div>
-                        )}
+                          </div>
 
-                        {activeConfirmTab === 'persoane' && (
-                            <div>
-                              <h3 className="font-semibold text-lg mb-4">Persoane apropiate</h3>
-                              <p className="text-muted-foreground">Conținutul pentru tab-ul Persoane apropiate va fi implementat ulterior.</p>
+                          <div className="mt-2">
+
+
+
+
+
+                            {/* Add Font Awesome for icons */}
+                            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+
+
+
+                            <div className="space-y-4">
+                              {/* Status icons row */}
+                              {/*<StatusBadgesRow />*/}
+
+                              {/* Toggle switches */}
+                              <ToggleOptionsGrid confirmOrder={confirmOrder} refreshUserData={refreshUserData} />
+
+
+
+
                             </div>
-                        )}
-
-
-                        {/* Client mood section */}
-
-                        <div className="w-full">
-                          <div className="grid grid-cols-7 gap-1">
-                            <button 
-                              onClick={() => handleClientMoodChange("angry")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Recalcitrant" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "angry" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-angry"></i>
-                            </button>
-                            <button 
-                              onClick={() => handleClientMoodChange("dizzy")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="IQ mic" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "dizzy" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-dizzy"></i>
-                            </button>
-                            <button 
-                              onClick={() => handleClientMoodChange("grin-hearts")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Dragut" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-hearts" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-grin-hearts"></i>
-                            </button>
-                            <button 
-                              onClick={() => handleClientMoodChange("frown")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Morocanos" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "frown" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-frown"></i>
-                            </button>
-                            <button 
-                              onClick={() => handleClientMoodChange("meh-rolling-eyes")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Pretentios" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "meh-rolling-eyes" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-meh-rolling-eyes"></i>
-                            </button>
-                            <button 
-                              onClick={() => handleClientMoodChange("meh")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Indiferent" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "meh" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-meh"></i>
-                            </button>
-                            {/* Debug: {clientMood} */}
-                            <button 
-                              onClick={() => handleClientMoodChange("grin-squint")}
-                              data-toggle="tooltip" 
-                              data-placement="top" 
-                              title="Amuzat" 
-                              className={`col-span-1 border p-2 rounded-md ${clientMood == "grin-squint" ? 'bg-green-500 border-green-500 text-white' : ''}`}
-                            >
-                              <i className="fas fa-grin-squint"></i>
-                            </button>
                           </div>
-                        </div>
-
-                        <div className="mt-2">
-
+                        </Card>
+                    )}
 
 
-
-
-                          {/* Add Font Awesome for icons */}
-                          <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossOrigin="anonymous" referrerPolicy="no-referrer" />
-
-
-
-                          <div className="space-y-4">
-                            {/* Status icons row */}
-                            {/*<StatusBadgesRow />*/}
-
-                            {/* Toggle switches */}
-                            <ToggleOptionsGrid confirmOrder={confirmOrder} refreshUserData={refreshUserData} />
-
-
-
-
-                          </div>
-                        </div>
-                      </Card>
-                  )}
-
-
-                  {activeTopTab === 'tab3' && (
-                      <div className="p-4 bg-muted/20 rounded-md">
-                        <h3 className="text-lg font-semibold mb-2">Conținut Tab 3</h3>
-                        <p>Acesta este conținutul pentru al treilea tab. Încă un text simplu pentru a demonstra funcționalitatea.</p>
-                      </div>
-                  )}
-                </div>
-              </div>
-
-
-
-            </div>
-
-            {/* Right column (25%) - Product personalization & dynamic fields */}
-            <div className="col-span-3 space-y-4 h-full ">
-
-              <Card>
-                {/* Gifts slider/list under sub-tabs: shows ~6 visible, rest scroll */}
-                <GiftsSlider />
-
-                {/* Difficulty level section */}
-                <div className="w-full p-4">
-                  <div className="flex items-center mb-2">
-                    <div className="text-sm font-medium mr-2">Dificultate:</div>
-                    {confirmOrder?.dificultate && (
-                        <div className="text-xs text-muted-foreground">
-                          (Valoare API: {confirmOrder.dificultate})
+                    {activeTopTab === 'tab3' && (
+                        <div className="p-4 bg-muted/20 rounded-md">
+                          <h3 className="text-lg font-semibold mb-2">Conținut Tab 3</h3>
+                          <p>Acesta este conținutul pentru al treilea tab. Încă un text simplu pentru a demonstra funcționalitatea.</p>
                         </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-5 gap-1">
-                    <button
-                        valoare="1"
-                        onClick={() => handleDifficultyChange("1")}
-                        data-toggle="tooltip"
-                        data-placement="top"
-                        title="Foarte ușor"
-                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "1" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                    >
-                      1
-                    </button>
-                    <button
-                        valoare="2"
-                        onClick={() => handleDifficultyChange("2")}
-                        data-toggle="tooltip"
-                        data-placement="top"
-                        title="Ușor"
-                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "2" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                    >
-                      2
-                    </button>
-                    <button
-                        valoare="3"
-                        onClick={() => handleDifficultyChange("3")}
-                        data-toggle="tooltip"
-                        data-placement="top"
-                        title="Mediu"
-                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "3" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                    >
-                      3
-                    </button>
-                    <button
-                        valoare="4"
-                        onClick={() => handleDifficultyChange("4")}
-                        data-toggle="tooltip"
-                        data-placement="top"
-                        title="Dificil"
-                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "4" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                    >
-                      4
-                    </button>
-                    <button
-                        valoare="5"
-                        onClick={() => handleDifficultyChange("5")}
-                        data-toggle="tooltip"
-                        data-placement="top"
-                        title="Foarte dificil"
-                        className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "5" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
-                    >
-                      5
-                    </button>
-                  </div>
                 </div>
 
 
 
-                <div className="p-4 ">
-                  <div className="flex items-center justify-between mb-4 ">
-                    <h3 className="font-semibold text-lg">Detalii produs & personalizare</h3>
-                    <Badge variant={isOrderPaid(confirmOrder) ? 'success' : 'outline'}>
-                      {confirmOrder?.order_total_formatted || confirmOrder?.pret_total || "-"} /
-                      {isOrderPaid(confirmOrder) ? ' plătit' : ' neplătit'}
-                    </Badge>
+              </div>
+
+              {/* Right column (25%) - Product personalization & dynamic fields */}
+              <div className="no-scrollbar h-full space-y-4 overflow-y-auto  ">
+
+                <Card>
+                  {/* Gifts slider/list under sub-tabs: shows ~6 visible, rest scroll */}
+                  <GiftsSlider />
+
+                  {/* Difficulty level section */}
+                  <div className="w-full p-4">
+                    <div className="flex items-center mb-2">
+                      <div className="text-sm font-medium mr-2">Dificultate:</div>
+                      {confirmOrder?.dificultate && (
+                          <div className="text-xs text-muted-foreground">
+                            (Valoare API: {confirmOrder.dificultate})
+                          </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-5 gap-1">
+                      <button
+                          valoare="1"
+                          onClick={() => handleDifficultyChange("1")}
+                          data-toggle="tooltip"
+                          data-placement="top"
+                          title="Foarte ușor"
+                          className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "1" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
+                      >
+                        1
+                      </button>
+                      <button
+                          valoare="2"
+                          onClick={() => handleDifficultyChange("2")}
+                          data-toggle="tooltip"
+                          data-placement="top"
+                          title="Ușor"
+                          className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "2" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
+                      >
+                        2
+                      </button>
+                      <button
+                          valoare="3"
+                          onClick={() => handleDifficultyChange("3")}
+                          data-toggle="tooltip"
+                          data-placement="top"
+                          title="Mediu"
+                          className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "3" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
+                      >
+                        3
+                      </button>
+                      <button
+                          valoare="4"
+                          onClick={() => handleDifficultyChange("4")}
+                          data-toggle="tooltip"
+                          data-placement="top"
+                          title="Dificil"
+                          className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "4" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
+                      >
+                        4
+                      </button>
+                      <button
+                          valoare="5"
+                          onClick={() => handleDifficultyChange("5")}
+                          data-toggle="tooltip"
+                          data-placement="top"
+                          title="Foarte dificil"
+                          className={`col-span-1 border p-2 rounded-md font-medium ${difficulty === "5" ? 'bg-green-500 border-green-500 border-2 text-white opacity-100' : 'bg-gray-100 border-gray-300 text-gray-700 opacity-50'}`}
+                      >
+                        5
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-4">
-                    {confirmOrder?.produse_finale.map((produs, idx) => {
-                      // Initialize personalization data array
-                      let personalizationData = [];
 
-                      // Check if we have personalization data in the items
-                      if (confirmOrder?.items && Array.isArray(confirmOrder.items)) {
-                        // Find the line item that corresponds to this product
-                        const orderItem = confirmOrder.items.find(item => 
-                          item.order_item_type === "line_item"
-                        );
 
-                        if (orderItem && orderItem.order_item_meta) {
-                          // Check for _tmcartepo_data meta
-                          const personalizationMeta = orderItem.order_item_meta.find(meta => 
-                            meta.meta_key === "_tmcartepo_data"
+                  <div className="p-4 ">
+                    <div className="flex items-center justify-between mb-4 ">
+                      <h3 className="font-semibold text-lg">Detalii produs & personalizare</h3>
+                      <Badge variant={isOrderPaid(confirmOrder) ? 'success' : 'outline'}>
+                        {confirmOrder?.order_total_formatted || confirmOrder?.pret_total || "-"} /
+                        {isOrderPaid(confirmOrder) ? ' plătit' : ' neplătit'}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-4">
+                      {confirmOrder?.produse_finale.map((produs, idx) => {
+                        // Initialize personalization data array
+                        let personalizationData = [];
+
+                        // Check if we have personalization data in the items
+                        if (confirmOrder?.items && Array.isArray(confirmOrder.items)) {
+                          // Find the line item that corresponds to this product
+                          const orderItem = confirmOrder.items.find(item => 
+                            item.order_item_type === "line_item"
                           );
 
-                          if (personalizationMeta && personalizationMeta.meta_value) {
-                            try {
-                              // Parse the serialized PHP data structure
-                              // We'll extract the personalization items from the _tmcartepo_data field
-                              const data = [];
+                          if (orderItem && orderItem.order_item_meta) {
+                            // Check for _tmcartepo_data meta
+                            const personalizationMeta = orderItem.order_item_meta.find(meta => 
+                              meta.meta_key === "_tmcartepo_data"
+                            );
 
-                              // Regular expressions to extract data from the serialized PHP format
-                              // This is a simplified approach to extract the key data points
-                              const valuePattern = /s:5:"value";s:\d+:"([^"]*)"/g;
-                              const namePattern = /s:4:"name";s:\d+:"([^"]*)"/g;
-                              const typePattern = /s:4:"type";s:\d+:"([^"]*)"/g;
-                              const displayPattern = /s:7:"display";s:\d+:"([^"]*)"/g;
+                            if (personalizationMeta && personalizationMeta.meta_value) {
+                              try {
+                                // Parse the serialized PHP data structure
+                                // We'll extract the personalization items from the _tmcartepo_data field
+                                const data = [];
 
-                              const metaValue = personalizationMeta.meta_value;
+                                // Regular expressions to extract data from the serialized PHP format
+                                // This is a simplified approach to extract the key data points
+                                const valuePattern = /s:5:"value";s:\d+:"([^"]*)"/g;
+                                const namePattern = /s:4:"name";s:\d+:"([^"]*)"/g;
+                                const typePattern = /s:4:"type";s:\d+:"([^"]*)"/g;
+                                const displayPattern = /s:7:"display";s:\d+:"([^"]*)"/g;
 
-                              // Extract all names, values, and types
-                              const names = [];
-                              const values = [];
-                              const types = [];
-                              const displays = [];
+                                const metaValue = personalizationMeta.meta_value;
 
-                              let nameMatch;
-                              while ((nameMatch = namePattern.exec(metaValue)) !== null) {
-                                names.push(nameMatch[1]);
-                              }
+                                // Extract all names, values, and types
+                                const names = [];
+                                const values = [];
+                                const types = [];
+                                const displays = [];
 
-                              let valueMatch;
-                              while ((valueMatch = valuePattern.exec(metaValue)) !== null) {
-                                values.push(valueMatch[1]);
-                              }
-
-                              let typeMatch;
-                              while ((typeMatch = typePattern.exec(metaValue)) !== null) {
-                                types.push(typeMatch[1]);
-                              }
-
-                              let displayMatch;
-                              while ((displayMatch = displayPattern.exec(metaValue)) !== null) {
-                                displays.push(displayMatch[1]);
-                              }
-
-                              // Create personalization items combining the extracted data
-                              for (let i = 0; i < names.length; i++) {
-                                if (values[i]) {
-                                  const item = {
-                                    name: names[i],
-                                    value: values[i],
-                                    type: types[i] || 'textfield', // Default to textfield if type not found
-                                  };
-
-                                  // Add display property for uploads
-                                  if (types[i] === 'upload' && displays[i]) {
-                                    // Extract the filename from display HTML
-                                    const displayTextMatch = displays[i].match(/>([^<]+)</);
-                                    if (displayTextMatch && displayTextMatch[1]) {
-                                      item.display = displayTextMatch[1];
-                                    } else {
-                                      item.display = 'Vezi imaginea';
-                                    }
-                                  }
-
-                                  data.push(item);
+                                let nameMatch;
+                                while ((nameMatch = namePattern.exec(metaValue)) !== null) {
+                                  names.push(nameMatch[1]);
                                 }
-                              }
 
-                              personalizationData = data;
-                            } catch (e) {
-                              console.error("Error parsing personalization data:", e);
+                                let valueMatch;
+                                while ((valueMatch = valuePattern.exec(metaValue)) !== null) {
+                                  values.push(valueMatch[1]);
+                                }
+
+                                let typeMatch;
+                                while ((typeMatch = typePattern.exec(metaValue)) !== null) {
+                                  types.push(typeMatch[1]);
+                                }
+
+                                let displayMatch;
+                                while ((displayMatch = displayPattern.exec(metaValue)) !== null) {
+                                  displays.push(displayMatch[1]);
+                                }
+
+                                // Create personalization items combining the extracted data
+                                for (let i = 0; i < names.length; i++) {
+                                  if (values[i]) {
+                                    const item = {
+                                      name: names[i],
+                                      value: values[i],
+                                      type: types[i] || 'textfield', // Default to textfield if type not found
+                                    };
+
+                                    // Add display property for uploads
+                                    if (types[i] === 'upload' && displays[i]) {
+                                      // Extract the filename from display HTML
+                                      const displayTextMatch = displays[i].match(/>([^<]+)</);
+                                      if (displayTextMatch && displayTextMatch[1]) {
+                                        item.display = displayTextMatch[1];
+                                      } else {
+                                        item.display = 'Vezi imaginea';
+                                      }
+                                    }
+
+                                    data.push(item);
+                                  }
+                                }
+
+                                personalizationData = data;
+                              } catch (e) {
+                                console.error("Error parsing personalization data:", e);
+                              }
                             }
                           }
                         }
-                      }
 
-                      return (
-                        <ProductPersonalizationCard 
-                          key={idx} 
-                          produs={produs} 
-                          idx={idx}
-                          personalizationData={personalizationData}
-                        />
-                      );
-                    })}
+                        return (
+                          <ProductPersonalizationCard 
+                            key={idx} 
+                            produs={produs} 
+                            idx={idx}
+                            personalizationData={personalizationData}
+                          />
+                        );
+                      })}
 
-                    <div className="border-t border-border pt-4 mt-4">
-                      {/*<h4 className="font-medium mb-3">Detalii de Personalizare - Desfășurător Comandă</h4>*/}
-                      {confirmOrder && (
-                        <OrderSummary
-                          orderData={{
-                            ID: confirmOrder.ID,
-                            customer_user: confirmOrder.customer_user.toString(),
-                            order_currency: confirmOrder.currency || "RON",
-                            _cart_discount: "0",
-                            _order_shipping: confirmOrder.shipping_details ? "17" : "0",
-                            total_buc: confirmOrder.total_buc || 1,
-                            pret_total: confirmOrder.pret_total || "0",
-                            order_total_formatted: confirmOrder.order_total_formatted || "0 lei",
-                            items: confirmOrder.produse_finale.map((produs, index) => ({
-                              order_item_id: index + 1,
-                              order_item_name: produs.nume,
-                              order_item_type: "line_item",
-                              order_id: confirmOrder.ID,
-                              order_item_meta: [
-                                {
-                                  meta_id: index * 10 + 1,
-                                  order_item_id: index + 1,
-                                  meta_key: "_product_id",
-                                  meta_value: produs.id_produs || ""
-                                },
-                                {
-                                  meta_id: index * 10 + 2,
-                                  order_item_id: index + 1,
-                                  meta_key: "_qty",
-                                  meta_value: produs.quantity || "1"
-                                },
-                                {
-                                  meta_id: index * 10 + 3,
-                                  order_item_id: index + 1,
-                                  meta_key: "_line_total",
-                                  meta_value: produs.pret || "0"
-                                }
-                              ]
-                            })).concat(confirmOrder.shipping_details ? [{
-                              order_item_id: 99999,
-                              order_item_name: "Transport",
-                              order_item_type: "shipping",
-                              order_id: confirmOrder.ID,
-                              order_item_meta: [
-                                {
-                                  meta_id: 999991,
-                                  order_item_id: 99999,
-                                  meta_key: "method_id",
-                                  meta_value: "flat_rate"
-                                },
-                                {
-                                  meta_id: 999992,
-                                  order_item_id: 99999,
-                                  meta_key: "cost",
-                                  meta_value: "17.00"
-                                }
-                              ]
-                            }] : [])
-                          }}
-                        />
-                      )}
+                      <div className="border-t border-border pt-4 mt-4">
+                        {/*<h4 className="font-medium mb-3">Detalii de Personalizare - Desfășurător Comandă</h4>*/}
+                        {confirmOrder && (
+                          <OrderSummary
+                            orderData={{
+                              ID: confirmOrder.ID,
+                              customer_user: confirmOrder.customer_user.toString(),
+                              order_currency: confirmOrder.currency || "RON",
+                              _cart_discount: "0",
+                              _order_shipping: confirmOrder.shipping_details ? "17" : "0",
+                              total_buc: confirmOrder.total_buc || 1,
+                              pret_total: confirmOrder.pret_total || "0",
+                              order_total_formatted: confirmOrder.order_total_formatted || "0 lei",
+                              items: confirmOrder.produse_finale.map((produs, index) => ({
+                                order_item_id: index + 1,
+                                order_item_name: produs.nume,
+                                order_item_type: "line_item",
+                                order_id: confirmOrder.ID,
+                                order_item_meta: [
+                                  {
+                                    meta_id: index * 10 + 1,
+                                    order_item_id: index + 1,
+                                    meta_key: "_product_id",
+                                    meta_value: produs.id_produs || ""
+                                  },
+                                  {
+                                    meta_id: index * 10 + 2,
+                                    order_item_id: index + 1,
+                                    meta_key: "_qty",
+                                    meta_value: produs.quantity || "1"
+                                  },
+                                  {
+                                    meta_id: index * 10 + 3,
+                                    order_item_id: index + 1,
+                                    meta_key: "_line_total",
+                                    meta_value: produs.pret || "0"
+                                  }
+                                ]
+                              })).concat(confirmOrder.shipping_details ? [{
+                                order_item_id: 99999,
+                                order_item_name: "Transport",
+                                order_item_type: "shipping",
+                                order_id: confirmOrder.ID,
+                                order_item_meta: [
+                                  {
+                                    meta_id: 999991,
+                                    order_item_id: 99999,
+                                    meta_key: "method_id",
+                                    meta_value: "flat_rate"
+                                  },
+                                  {
+                                    meta_id: 999992,
+                                    order_item_id: 99999,
+                                    meta_key: "cost",
+                                    meta_value: "17.00"
+                                  }
+                                ]
+                              }] : [])
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      {/*<Button className="w-full">*/}
+                      {/*  Actualizează*/}
+                      {/*</Button>*/}
                     </div>
-
-                    {/*<Button className="w-full">*/}
-                    {/*  Actualizează*/}
-                    {/*</Button>*/}
                   </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
+
             </div>
 
-
-
             {/* Notes and SMS column (25%) - Order notes and SMS */}
-            <div className="col-span-2 space-y-4 h-full">
+            <div ref={scrollContainerRef} className="no-scrollbar h-full col-span-2 space-y-4 overflow-y-auto relative">
               <Card className="h-full flex flex-col border-0 shadow-none p-0">
                 <div className="p-4 flex flex-col flex-grow">
 
 
                   {/* Tabs for Notes and SMS */}
-                  <div className="flex border-b border-border mb-4">
+                  <div className="sticky top-0 z-10 bg-background flex border-b border-border mb-4">
                     <button
                       type="button"
                       onClick={() => setActiveNotesTab('notite')}
@@ -3929,6 +3964,17 @@ Echipa Daruri Alese`;
                   )}
                 </div>
               </Card>
+
+              {/* Scroll to top button */}
+              {showScrollToTop && (
+                <Button
+                  onClick={scrollToTop}
+                  className="fixed bottom-4 right-4 z-20 rounded-full w-10 h-10 p-0 shadow-lg bg-primary hover:bg-primary/90"
+                  title="Scroll to top"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
