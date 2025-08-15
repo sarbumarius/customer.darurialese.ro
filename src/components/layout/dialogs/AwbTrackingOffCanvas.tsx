@@ -88,7 +88,7 @@ export const AwbTrackingOffCanvas: React.FC<AwbTrackingOffCanvasProps> = ({
                     return nm || '-';
                   })()}
                   {(() => {
-                    const v: any = (awbOrder as any)?.fara_factura_in_colet;
+                    const v: any = (awbOrder as any)?.comandaCadou;
                     const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
                     return isGift ? (
                       <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />

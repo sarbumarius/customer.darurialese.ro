@@ -7,9 +7,10 @@ import type { Comanda } from "@/types/dashboard";
 
 interface ToggleOptionsGridProps {
   confirmOrder: Comanda | null;
+  refreshUserData?: (orderId: number) => Promise<void>;
 }
 
-const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder }) => {
+const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder, refreshUserData }) => {
   // State to track toggle values and shipping date
   const [toggleValues, setToggleValues] = useState({
     noSmsGraphics: false,
@@ -113,6 +114,11 @@ const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder }) =
       }
 
       console.log(`Toggle ${toggleId} updated successfully`);
+      
+      // Refresh user data from API to ensure all UI components have the latest data
+      if (refreshUserData && confirmOrder.ID) {
+        await refreshUserData(confirmOrder.ID);
+      }
     } catch (error) {
       console.error(`Error updating toggle ${toggleId}:`, error);
       // Revert the local state if API call fails
@@ -136,7 +142,8 @@ const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder }) =
       // Update local state immediately for responsive UI
       setShippingDate(newDate);
 
-      const response = await fetch(`https://crm.actium.ro/api/modificare-expediere/${confirmOrder.ID}/${newDate}`, {
+      const encodedDate = encodeURIComponent(newDate);
+      const response = await fetch(`https://crm.actium.ro/api/modificare-expediere/${confirmOrder.ID}/${encodedDate}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -148,6 +155,11 @@ const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder }) =
       }
 
       console.log(`Shipping date updated successfully to ${newDate}`);
+      
+      // Refresh user data from API to ensure all UI components have the latest data
+      if (refreshUserData && confirmOrder.ID) {
+        await refreshUserData(confirmOrder.ID);
+      }
     } catch (error) {
       console.error(`Error updating shipping date:`, error);
       // Revert the local state if API call fails
@@ -170,6 +182,7 @@ const ToggleOptionsGrid: React.FC<ToggleOptionsGridProps> = ({ confirmOrder }) =
             type="date"
             className="w-full p-2 border border-border rounded-md"
             value={shippingDate}
+            onChange={(e) => setShippingDate(e.target.value)}
             onBlur={handleShippingDateChange}
         />
       </div>

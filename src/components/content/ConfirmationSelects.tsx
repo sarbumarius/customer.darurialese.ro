@@ -53,7 +53,8 @@ const ConfirmationSelects: React.FC<ConfirmationSelectsProps> = ({ confirmOrder 
       // Update local state immediately for responsive UI
       setShippingDate(newDate);
 
-      const response = await fetch(`https://crm.actium.ro/api/modificare-expediere/${confirmOrder.ID}/${newDate}`, {
+      const encodedDate = encodeURIComponent(newDate);
+      const response = await fetch(`https://crm.actium.ro/api/modificare-expediere/${confirmOrder.ID}/${encodedDate}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

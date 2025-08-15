@@ -57,6 +57,21 @@ export interface OrderNote {
 }
 
 // Unified order type used across the UI
+export interface OrderItemMeta {
+  meta_id: number;
+  order_item_id: number;
+  meta_key: string;
+  meta_value: string;
+}
+
+export interface OrderItem {
+  order_item_id: number;
+  order_item_name: string;
+  order_item_type: string;
+  order_id: number;
+  order_item_meta: OrderItemMeta[];
+}
+
 export interface Comanda {
   // Reasons for unconfirmed order (API: motive_comanda_neconfirmata). New structure with count and motives array.
   motive_comanda_neconfirmata?: {
@@ -71,7 +86,9 @@ export interface Comanda {
   data_comanda?: string; // convenience date/time for UI
   awb_curier?: string; // AWB (tracking) code from API
   fara_factura_in_colet?: number | string | boolean; // 1 => cadou (gift), show icon in UI
+    comandaCadou?: boolean; // convenience boolean for UI
   customer_user: number; // User ID of the customer
+  items?: OrderItem[]; // Items from the API response, including personalization data
   shipping_details: {
     _shipping_first_name: string;
     _shipping_last_name: string;

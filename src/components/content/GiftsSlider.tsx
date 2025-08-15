@@ -20,7 +20,7 @@ export const GiftsSlider: React.FC<GiftsSliderProps> = ({ title = "Alege un cado
       <div className="overflow-x-auto">
         <div className="flex gap-3 pr-1">
           {gifts.map((name) => (
-            <div key={name} className="flex-none w-1/6 min-w-[140px] border rounded p-2 hover:shadow-sm transition bg-background">
+            <div key={name} className="flex-none w-1/6 min-w-[90px] border rounded p-2 hover:shadow-sm transition bg-background">
               <div className="w-full aspect-square overflow-hidden rounded">
                 <img
                   src={`${base}/${name}.png`}

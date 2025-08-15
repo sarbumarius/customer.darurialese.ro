@@ -12,8 +12,9 @@ import StatusBadgesRow from "@/components/content/StatusBadgesRow";
 import ToggleOptionsGrid from "@/components/content/ToggleOptionsGrid";
 import ConfirmationSelects from "@/components/content/ConfirmationSelects";
 import ProductPersonalizationCard from "@/components/content/ProductPersonalizationCard";
+import OrderSummary from "@/components/content/OrderSummary";
 import GiftsSlider from "@/components/content/GiftsSlider";
-import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info } from "lucide-react";
+import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users } from "lucide-react";
 import type { Comanda } from "@/types/dashboard";
 
 // Interface for SMS message
@@ -165,6 +166,7 @@ export interface ConfirmOrderDialogProps {
   setActiveConfirmTab: (t: 'confirmare' | 'puncte' | 'persoane') => void;
   activeAddressTab: 'shipping' | 'billing';
   setActiveAddressTab: (t: 'shipping' | 'billing') => void;
+  refreshUserData?: (orderId: number) => Promise<void>;
 }
 
 export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
@@ -175,6 +177,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
   setActiveConfirmTab,
   activeAddressTab,
   setActiveAddressTab,
+  refreshUserData,
 }) => {
   // console.log("ConfirmOrderDialog rendered with activeConfirmTab:", activeConfirmTab);
   // State for the note textarea
@@ -189,12 +192,15 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
   // State for the client orders modal
   const [showClientOrdersModal, setShowClientOrdersModal] = useState(false);
+  
+  // State for updating gift status
+  const [isUpdatingGift, setIsUpdatingGift] = useState(false);
 
   // State for the top tabs
   const [activeTopTab, setActiveTopTab] = useState<'tab1' | 'tab3' | 'tab4'>('tab1');
 
   // State for the notes tabs
-  const [activeNotesTab, setActiveNotesTab] = useState<'notite' | 'sms' | 'puncte'>('notite');
+  const [activeNotesTab, setActiveNotesTab] = useState<'notite' | 'sms' | 'puncte' | 'persoane'>('notite');
 
   // State for SMS messages
   const [smsMessages, setSmsMessages] = useState<SmsMessage[]>([]);
@@ -746,6 +752,11 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
       // Optionally show success message or update UI
       if (data.success) {
         console.log(`💳 ${data.message}`);
+        
+        // Refresh user data from API to ensure all UI components have the latest data
+        if (refreshUserData) {
+          await refreshUserData(confirmOrder.ID);
+        }
       }
 
     } catch (error) {
@@ -1057,6 +1068,11 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
         // Clear success message after 3 seconds
         setTimeout(() => setPuncteAddSuccess(null), 3000);
+        
+        // Refresh user data from API to ensure all UI components have the latest data
+        if (refreshUserData && confirmOrder.ID) {
+          await refreshUserData(confirmOrder.ID);
+        }
       }
 
     } catch (error) {
@@ -1585,6 +1601,11 @@ Echipa Daruri Alese`;
       }
 
       console.log(`Difficulty updated successfully to ${value}`);
+      
+      // Refresh user data from API to ensure all UI components have the latest data
+      if (refreshUserData) {
+        await refreshUserData(confirmOrder.ID);
+      }
     } catch (error) {
       console.error(`Error updating difficulty:`, error);
       // Revert the local state if API call fails
@@ -1623,6 +1644,11 @@ Echipa Daruri Alese`;
       }
 
       console.log(`Client mood updated successfully to ${iconName}`);
+      
+      // Refresh user data from API to ensure all UI components have the latest data
+      if (refreshUserData) {
+        await refreshUserData(confirmOrder.ID);
+      }
     } catch (error) {
       console.error(`Error updating client mood:`, error);
       // Revert the local state if API call fails
@@ -1652,6 +1678,59 @@ Echipa Daruri Alese`;
   const getPaymentStatusText = (order: Comanda | null): string => {
     return isOrderPaid(order) ? 'Plătit' : 'Neplătit';
   };
+  
+  // Function to toggle gift status
+  const toggleGiftStatus = async () => {
+    if (!confirmOrder?.ID || isUpdatingGift) return;
+    
+    const isGift = confirmOrder?.comandaCadou !== false && 
+                 (confirmOrder?.comandaCadou === 1 || 
+                  confirmOrder?.comandaCadou === '1' || 
+                  confirmOrder?.comandaCadou === true || 
+                  String(confirmOrder?.comandaCadou || '').trim() === '1');
+    
+    try {
+      setIsUpdatingGift(true);
+      // Send "nu" if it's currently a gift, otherwise send "da"
+      const newValue = isGift ? 'nu' : 'da';
+      
+      const response = await fetch(`https://crm.actium.ro/api/modificarei-comanda-caodu/${confirmOrder.ID}/${newValue}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      
+      // Parse the API response to get updated data
+      const responseData = await response.json();
+      console.log('API response:', responseData);
+      
+      // Update the local state to reflect the change
+      // Map the API response to the appropriate format
+      // For "da" the comandaCadou should be true/1/"1", for "nu" it should be false/0/"0"
+      const updatedOrder = { 
+        ...confirmOrder,
+        comandaCadou: newValue === 'da' ? true : false
+      };
+      
+
+      
+      // Refresh user data from API to ensure all UI components have the latest data
+      if (refreshUserData && confirmOrder.ID) {
+        await refreshUserData(confirmOrder.ID);
+      }
+      
+      console.log(`Gift status updated to ${newValue}`, updatedOrder);
+    } catch (error) {
+      console.error('Error updating gift status:', error);
+    } finally {
+      setIsUpdatingGift(false);
+    }
+  };
 
   // We'll use this function to format dates
   const formatDate = (dateString: string) => {
@@ -1668,31 +1747,62 @@ Echipa Daruri Alese`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="fixed inset-0 w-full h-full max-w-[1800px] p-0 m-0 rounded-none translate-x-0 translate-y-0 overflow-hidden flex flex-col mx-auto">
+      <DialogContent className="fixed inset-0 w-full h-full max-w-[1800px] p-0 m-0 rounded-none translate-x-0 translate-y-0 overflow-hidden flex flex-col mx-auto gap-0">
         {/* Sticky top bar */}
         <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex flex-wrap items-center justify-between gap-2 ">
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Order ID and client name */}
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-sm">
-                <a href={`https://darurialese.com/wp-admin/post.php?post=${confirmOrder?.ID}&action=edit`} target="_blank" rel="noopener noreferrer">
-                #{confirmOrder?.ID}
-                </a>
-                </Badge>
-              <span className="font-medium">
-                {confirmOrder?.shipping_details._shipping_first_name}{" "}
-                {confirmOrder?.shipping_details._shipping_last_name}
-              </span>
-            </div>
+          {/* Single line header with ID, name, and order count */}
+          <div className="flex items-center gap-3">
+            {/* Order ID */}
+            <Badge variant="outline" className="text-sm">
+              <a href={`https://darurialese.com/wp-admin/post.php?post=${confirmOrder?.ID}&action=edit`} target="_blank" rel="noopener noreferrer">
+              #{confirmOrder?.ID}
+              </a>
+            </Badge>
+            
+            {/* Name */}
+            <span className="font-semibold">
+              {confirmOrder?.shipping_details._shipping_first_name}{" "}
+              {confirmOrder?.shipping_details._shipping_last_name}
+            </span>
+            
+            {/* Order count in parentheses */}
+            <button 
+              className="text-sm text-muted-foreground hover:text-primary focus:outline-none focus:text-primary flex items-center"
+              onClick={() => setShowClientOrdersModal(true)}
+            >
+              <ShoppingBag className="h-4 w-4 mr-1" />
+              <span>({confirmOrder?.total_comenzi || 3} comenzi)</span>
+            </button>
+
 
             {/* Total amount */}
             <Badge variant="secondary" className="text-sm font-semibold">
               {confirmOrder?.order_total_formatted || confirmOrder?.pret_total || "-"}
             </Badge>
 
-            {/* Order type icon */}
+            {/* Order type icon - clickable for gift status toggle */}
             <div className="flex items-center gap-1">
-              <Gift className="h-4 w-4 text-muted-foreground" />
+              {(() => {
+                const v = confirmOrder?.comandaCadou;
+                const isGift = v !== false && (v === 1 || v === '1' || v === true || String(v || '').trim() === '1');
+                
+                return (
+                  <button 
+                    onClick={toggleGiftStatus}
+                    disabled={isUpdatingGift}
+                    className="relative rounded-full p-1 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
+                    title={isGift ? "Comandă cadou - Click pentru a dezactiva" : "Nu este comandă cadou - Click pentru a activa"}
+                  >
+                    {isUpdatingGift ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Gift 
+                        className={`h-4 w-4 ${isGift ? 'text-pink-600' : 'text-muted-foreground'}`} 
+                      />
+                    )}
+                  </button>
+                );
+              })()}
             </div>
 
             {/* Creation date & time */}
@@ -1757,34 +1867,10 @@ Echipa Daruri Alese`;
             {/* Left column (18.75%) - Client data & logistics */}
             <div className="col-span-2 space-y-4">
 
-              {/* Client Avatar Card */}
-              <Card>
-                <div className="p-4">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                      <User className="h-8 w-8" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">
-                        {confirmOrder?.shipping_details._shipping_first_name}{" "}
-                        {confirmOrder?.shipping_details._shipping_last_name}
-                      </h3>
-                      <div className="flex items-center text-sm text-muted-foreground mt-1">
-                        <ShoppingBag className="h-4 w-4 mr-1" />
-                        <span>3 comenzi</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    className="w-full"
-                    onClick={() => setShowClientOrdersModal(true)}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Vezi comenzi
-                  </Button>
+              {/* Payment Method Card */}
 
-                  <div className="p-4">
+                <div className="p-2">
+
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-lg">Metodă de plată</h3>
@@ -1866,48 +1952,52 @@ Echipa Daruri Alese`;
                             </div>
                           )}
 
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="mt-3 w-full"
-                            onClick={sendBillingEmail}
-                            disabled={sendingEmail || !confirmOrder?.billing_details?._billing_email}
-                          >
-                            {sendingEmail ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                Se trimite...
-                              </>
-                            ) : (
-                              "Trimite pe email"
-                            )}
-                          </Button>
+                          {/* 3-column grid layout for buttons */}
+                          <div className="grid grid-cols-3 gap-2 mt-3">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="flex items-center justify-center"
+                              onClick={sendBillingEmail}
+                              disabled={sendingEmail || !confirmOrder?.billing_details?._billing_email}
+                            >
+                              {sendingEmail ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Mail className="h-4 w-4 mr-1" />
 
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="mt-2 w-full"
-                            onClick={sendBillingWhatsApp}
-                            disabled={sendingWhatsApp || (!confirmOrder?.billing_details?._billing_phone && !confirmOrder?.shipping_details._shipping_phone)}
-                          >
-                            {sendingWhatsApp ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                Se trimite...
-                              </>
-                            ) : (
-                              "Trimite pe WhatsApp"
-                            )}
-                          </Button>
+                                </>
+                              )}
+                            </Button>
 
-                          <Button
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="flex items-center justify-center"
+                              onClick={sendBillingWhatsApp}
+                              disabled={sendingWhatsApp || (!confirmOrder?.billing_details?._billing_phone && !confirmOrder?.shipping_details._shipping_phone)}
+                            >
+                              {sendingWhatsApp ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <MessageSquare className="h-4 w-4 mr-1" />
+
+                                </>
+                              )}
+                            </Button>
+
+                            <Button
                               size="sm"
                               variant="outline"
-                              className="mt-2 w-full"
+                              className="flex items-center justify-center"
                               onClick={() => setShowVerifyPaymentModal(true)}
-                          >
-                            Verifică plata
-                          </Button>
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+
+                            </Button>
+                          </div>
                         </div>
                     )}
 
@@ -1919,7 +2009,7 @@ Echipa Daruri Alese`;
                           </Button>
                         </div>
                     )}
-                  </div>
+
 
                   {/* Task List */}
                   {/*<div className="mt-4 pt-4 border-t border-border">*/}
@@ -1954,7 +2044,7 @@ Echipa Daruri Alese`;
                   {/*  </div>*/}
                   {/*</div>*/}
                 </div>
-              </Card>
+
 
 
 
@@ -2542,32 +2632,7 @@ Echipa Daruri Alese`;
 
               {/* Top tabs */}
               <div className="bg-background border-b border-border">
-                <div className="flex border-b border-border max-w-[1800px] mx-auto px-4">
-                  <button
-                      type="button"
-                      onClick={() => setActiveTopTab('tab1')}
-                      className={`px-4 py-2 font-medium ${
-                          activeTopTab === 'tab1'
-                              ? 'border-b-2 border-primary text-primary'
-                              : 'text-muted-foreground'
-                      }`}
-                  >
-                   Confirmare
-                  </button>
 
-
-                    <button
-                        type="button"
-                        onClick={() => setActiveTopTab('tab4')}
-                        className={`px-4 py-2 font-medium ${
-                            activeTopTab === 'tab4'
-                                ? 'border-b-2 border-primary text-primary'
-                                : 'text-muted-foreground'
-                        }`}
-                    >
-                        Persoane apropiate
-                    </button>
-                </div>
 
                 {/* Tab content */}
                 <div className=" max-w-[1800px] mx-auto">
@@ -2991,7 +3056,7 @@ Echipa Daruri Alese`;
                             {/*<StatusBadgesRow />*/}
 
                             {/* Toggle switches */}
-                            <ToggleOptionsGrid confirmOrder={confirmOrder} />
+                            <ToggleOptionsGrid confirmOrder={confirmOrder} refreshUserData={refreshUserData} />
 
 
 
@@ -3098,13 +3163,172 @@ Echipa Daruri Alese`;
                   </div>
 
                   <div className="space-y-4">
-                    {confirmOrder?.produse_finale.map((produs, idx) => (
-                        <ProductPersonalizationCard key={idx} produs={produs} idx={idx} />
-                    ))}
+                    {confirmOrder?.produse_finale.map((produs, idx) => {
+                      // Initialize personalization data array
+                      let personalizationData = [];
+                      
+                      // Check if we have personalization data in the items
+                      if (confirmOrder?.items && Array.isArray(confirmOrder.items)) {
+                        // Find the line item that corresponds to this product
+                        const orderItem = confirmOrder.items.find(item => 
+                          item.order_item_type === "line_item"
+                        );
+                        
+                        if (orderItem && orderItem.order_item_meta) {
+                          // Check for _tmcartepo_data meta
+                          const personalizationMeta = orderItem.order_item_meta.find(meta => 
+                            meta.meta_key === "_tmcartepo_data"
+                          );
+                          
+                          if (personalizationMeta && personalizationMeta.meta_value) {
+                            try {
+                              // Parse the serialized PHP data structure
+                              // We'll extract the personalization items from the _tmcartepo_data field
+                              const data = [];
+                              
+                              // Regular expressions to extract data from the serialized PHP format
+                              // This is a simplified approach to extract the key data points
+                              const valuePattern = /s:5:"value";s:\d+:"([^"]*)"/g;
+                              const namePattern = /s:4:"name";s:\d+:"([^"]*)"/g;
+                              const typePattern = /s:4:"type";s:\d+:"([^"]*)"/g;
+                              const displayPattern = /s:7:"display";s:\d+:"([^"]*)"/g;
+                              
+                              const metaValue = personalizationMeta.meta_value;
+                              
+                              // Extract all names, values, and types
+                              const names = [];
+                              const values = [];
+                              const types = [];
+                              const displays = [];
+                              
+                              let nameMatch;
+                              while ((nameMatch = namePattern.exec(metaValue)) !== null) {
+                                names.push(nameMatch[1]);
+                              }
+                              
+                              let valueMatch;
+                              while ((valueMatch = valuePattern.exec(metaValue)) !== null) {
+                                values.push(valueMatch[1]);
+                              }
+                              
+                              let typeMatch;
+                              while ((typeMatch = typePattern.exec(metaValue)) !== null) {
+                                types.push(typeMatch[1]);
+                              }
+                              
+                              let displayMatch;
+                              while ((displayMatch = displayPattern.exec(metaValue)) !== null) {
+                                displays.push(displayMatch[1]);
+                              }
+                              
+                              // Create personalization items combining the extracted data
+                              for (let i = 0; i < names.length; i++) {
+                                if (values[i]) {
+                                  const item = {
+                                    name: names[i],
+                                    value: values[i],
+                                    type: types[i] || 'textfield', // Default to textfield if type not found
+                                  };
+                                  
+                                  // Add display property for uploads
+                                  if (types[i] === 'upload' && displays[i]) {
+                                    // Extract the filename from display HTML
+                                    const displayTextMatch = displays[i].match(/>([^<]+)</);
+                                    if (displayTextMatch && displayTextMatch[1]) {
+                                      item.display = displayTextMatch[1];
+                                    } else {
+                                      item.display = 'Vezi imaginea';
+                                    }
+                                  }
+                                  
+                                  data.push(item);
+                                }
+                              }
+                              
+                              personalizationData = data;
+                            } catch (e) {
+                              console.error("Error parsing personalization data:", e);
+                            }
+                          }
+                        }
+                      }
+                      
+                      return (
+                        <ProductPersonalizationCard 
+                          key={idx} 
+                          produs={produs} 
+                          idx={idx}
+                          personalizationData={personalizationData}
+                        />
+                      );
+                    })}
 
-                    <Button className="w-full">
-                      Actualizează
-                    </Button>
+                    <div className="border-t border-border pt-4 mt-4">
+                      {/*<h4 className="font-medium mb-3">Detalii de Personalizare - Desfășurător Comandă</h4>*/}
+                      {confirmOrder && (
+                        <OrderSummary
+                          orderData={{
+                            ID: confirmOrder.ID,
+                            customer_user: confirmOrder.customer_user.toString(),
+                            order_currency: confirmOrder.currency || "RON",
+                            _cart_discount: "0",
+                            _order_shipping: confirmOrder.shipping_details ? "17" : "0",
+                            total_buc: confirmOrder.total_buc || 1,
+                            pret_total: confirmOrder.pret_total || "0",
+                            order_total_formatted: confirmOrder.order_total_formatted || "0 lei",
+                            items: confirmOrder.produse_finale.map((produs, index) => ({
+                              order_item_id: index + 1,
+                              order_item_name: produs.nume,
+                              order_item_type: "line_item",
+                              order_id: confirmOrder.ID,
+                              order_item_meta: [
+                                {
+                                  meta_id: index * 10 + 1,
+                                  order_item_id: index + 1,
+                                  meta_key: "_product_id",
+                                  meta_value: produs.id_produs || ""
+                                },
+                                {
+                                  meta_id: index * 10 + 2,
+                                  order_item_id: index + 1,
+                                  meta_key: "_qty",
+                                  meta_value: produs.quantity || "1"
+                                },
+                                {
+                                  meta_id: index * 10 + 3,
+                                  order_item_id: index + 1,
+                                  meta_key: "_line_total",
+                                  meta_value: produs.pret || "0"
+                                }
+                              ]
+                            })).concat(confirmOrder.shipping_details ? [{
+                              order_item_id: 99999,
+                              order_item_name: "Transport",
+                              order_item_type: "shipping",
+                              order_id: confirmOrder.ID,
+                              order_item_meta: [
+                                {
+                                  meta_id: 999991,
+                                  order_item_id: 99999,
+                                  meta_key: "method_id",
+                                  meta_value: "flat_rate"
+                                },
+                                {
+                                  meta_id: 999992,
+                                  order_item_id: 99999,
+                                  meta_key: "cost",
+                                  meta_value: "17.00"
+                                }
+                              ]
+                            }] : [])
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/*<Button className="w-full">*/}
+                    {/*  Actualizează*/}
+                    {/*</Button>*/}
                   </div>
                 </div>
               </Card>
@@ -3123,13 +3347,14 @@ Echipa Daruri Alese`;
                     <button
                       type="button"
                       onClick={() => setActiveNotesTab('notite')}
-                      className={`px-3 py-2 text-sm font-medium ${
+                      className={`px-3 py-2 text-sm font-medium flex items-center gap-1 ${
                         activeNotesTab === 'notite'
                           ? 'border-b-2 border-primary text-primary'
                           : 'text-muted-foreground'
                       }`}
                     >
-                      Notite
+                      <FileText className="h-4 w-4" />
+
                     </button>
                     <button
                       type="button"
@@ -3140,12 +3365,13 @@ Echipa Daruri Alese`;
                           fetchSmsMessages(confirmOrder.billing_details._billing_phone);
                         }
                       }}
-                      className={`px-3 py-2 text-sm font-medium ${
+                      className={`px-3 py-2 text-sm font-medium flex items-center gap-1 ${
                         activeNotesTab === 'sms'
                           ? 'border-b-2 border-primary text-primary'
                           : 'text-muted-foreground'
                       }`}
                     >
+                      <MessageSquare className="h-4 w-4" />
                       SMS
                     </button>
                     <button
@@ -3157,13 +3383,28 @@ Echipa Daruri Alese`;
                           fetchPuncteHistory(confirmOrder.customer_user);
                         }
                       }}
-                      className={`px-3 py-2 text-sm font-medium ${
+                      className={`px-3 py-2 text-sm font-medium flex items-center gap-1 ${
                         activeNotesTab === 'puncte'
                           ? 'border-b-2 border-primary text-primary'
                           : 'text-muted-foreground'
                       }`}
                     >
+                      <CreditCard className="h-4 w-4" />
                       Puncte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveNotesTab('persoane');
+                      }}
+                      className={`px-3 py-2 text-sm font-medium flex items-center gap-1 ${
+                        activeNotesTab === 'persoane'
+                          ? 'border-b-2 border-primary text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      <Users className="h-4 w-4" />
+
                     </button>
                   </div>
 
@@ -3536,6 +3777,56 @@ Echipa Daruri Alese`;
                       </div>
                     </div>
                   )}
+
+                  {/* Persoane tab content */}
+                  {activeNotesTab === 'persoane' && (
+                    <div className="flex flex-col flex-grow">
+                      <div className="bg-muted/20 p-4 rounded-md mb-4">
+                        <h3 className="text-base font-medium mb-2">Persoane apropiate</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Adăugați persoane apropiate clientului pentru a ține evidența evenimentelor și preferințelor acestora.
+                        </p>
+                      </div>
+                      
+                      <div className="flex flex-col space-y-2 mb-4">
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Nume persoană..."
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Relație (soț/soție/copil)..."
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <input
+                              type="date"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Data nașterii..."
+                            />
+                          </div>
+                          <Button className="whitespace-nowrap">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Adaugă
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="border border-border rounded-md overflow-hidden flex-grow min-h-0">
+                        <div className="p-8 text-center text-muted-foreground">
+                          Nu există persoane adăugate pentru acest client.
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
@@ -3543,25 +3834,25 @@ Echipa Daruri Alese`;
         </div>
 
         {/* Sticky footer */}
-        <div className="sticky bottom-0 z-10 bg-background border-t border-border p-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            <span className="text-green-500 animate-pulse">✓ Salvat automat</span>
-            <button className="ml-3 text-primary hover:underline">Jurnal modificări</button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
-              Închide
-            </Button>
+        {/*<div className="sticky bottom-0 z-10 bg-background border-t border-border p-4 flex items-center justify-between">*/}
+        {/*  <div className="text-sm text-muted-foreground">*/}
+        {/*    <span className="text-green-500 animate-pulse">✓ Salvat automat</span>*/}
+        {/*    <button className="ml-3 text-primary hover:underline">Jurnal modificări</button>*/}
+        {/*  </div>*/}
+        {/*  <div className="flex items-center gap-2">*/}
+        {/*    <Button variant="outline" onClick={() => setShowConfirmModal(false)}>*/}
+        {/*      Închide*/}
+        {/*    </Button>*/}
 
-            <Button variant="default" onClick={() => {
-              // Here you would implement the confirmation logic
-              alert('Comandă confirmată!');
-              setShowConfirmModal(false);
-            }}>
-              Confirma comanda
-            </Button>
-          </div>
-        </div>
+        {/*    <Button variant="default" onClick={() => {*/}
+        {/*      // Here you would implement the confirmation logic*/}
+        {/*      alert('Comandă confirmată!');*/}
+        {/*      setShowConfirmModal(false);*/}
+        {/*    }}>*/}
+        {/*      Confirma comanda*/}
+        {/*    </Button>*/}
+        {/*  </div>*/}
+        {/*</div>*/}
       </DialogContent>
 
       {/* Verify Payment Modal */}

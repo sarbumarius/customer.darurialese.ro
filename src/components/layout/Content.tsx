@@ -84,6 +84,62 @@ export const Content = ({
   // Notes off-canvas state
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [notesOrder, setNotesOrder] = useState<Comanda | null>(null);
+  
+  const refreshUserData = async (orderId: number) => {
+    try {
+      console.log(`🔄 Refreshing user data for order ${orderId}`);
+      // Use the correct API endpoint format - this endpoint expects an order ID
+      const response = await fetch(`https://crm.actium.ro/api/comenzi-daruri-alese-customer-id/${orderId}`);
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data && Array.isArray(data) && data.length > 0) {
+        // Normalize the data format, similar to Dashboard.tsx
+        const processedData = data.map((o: any) => {
+          const produseFinale = Array.isArray(o.produse) ? o.produse : (Array.isArray(o.produse_finale) ? o.produse_finale : []);
+          const idComanda = o.id_comanda ?? (o.ID != null ? String(o.ID) : undefined);
+          const dataComanda = o.data_comanda ?? o.post_date ?? undefined;
+          return {
+            ...o,
+            id_comanda: idComanda,
+            data_comanda: dataComanda,
+            produse_finale: produseFinale,
+            // Safe defaults for optional arrays used in UI
+            notes: Array.isArray(o.notes) ? o.notes : [],
+            fisieregrafica: Array.isArray(o.fisieregrafica) ? o.fisieregrafica : [],
+            download_fisiere_grafica: Array.isArray(o.download_fisiere_grafica) ? o.download_fisiere_grafica : [],
+            previzualizare_galerie: Array.isArray(o.previzualizare_galerie) ? o.previzualizare_galerie : [],
+            lipsuri: Array.isArray(o.lipsuri) ? o.lipsuri : [],
+          };
+        });
+        
+        // Update the specific order in the comenzi array
+        setComenzi(prevComenzi => {
+          return prevComenzi.map(comanda => {
+            if (comanda.ID === orderId) {
+              return processedData[0];
+            }
+            return comanda;
+          });
+        });
+        
+        // Update confirmOrder if it's the current order being viewed
+        if (confirmOrder?.ID === orderId) {
+          setConfirmOrder(processedData[0]);
+        }
+        
+        console.log(`✅ User data refreshed successfully for order ${orderId}`);
+      } else {
+        console.error(`No data returned or invalid data format for order ${orderId}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error refreshing user data for order ${orderId}:`, error);
+    }
+  };
   // Add WP note modal state (UI only for now)
   const [showAddWpNoteModal, setShowAddWpNoteModal] = useState(false);
   const [addWpNoteText, setAddWpNoteText] = useState('');
@@ -1599,8 +1655,9 @@ export const Content = ({
                                         {primaryName || '-'}
                                       </button>
                                       {(() => {
-                                        const v: any = (c as any).fara_factura_in_colet;
-                                        const isGift = v === 1 || v === '1' || v === true || String(v || '').trim() === '1';
+                                        const v: any = (c as any).comandaCadou;
+                                        // Check if v is explicitly false - need to handle this specific case
+                                        const isGift = v !== false && (v === 1 || v === '1' || v === true || String(v || '').trim() === '1');
                                         return isGift ? (
                                           <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />
                                         ) : null;
@@ -2240,6 +2297,7 @@ export const Content = ({
             setActiveConfirmTab={setActiveConfirmTab}
             activeAddressTab={activeAddressTab}
             setActiveAddressTab={setActiveAddressTab}
+            refreshUserData={refreshUserData}
         />
 
 
