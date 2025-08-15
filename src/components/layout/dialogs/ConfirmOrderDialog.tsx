@@ -65,6 +65,37 @@ interface PuncteHistoryItem {
   date: string;
 }
 
+// Interface for Bank Transaction data
+interface BankTransaction {
+  id: number;
+  bank_account_id: number;
+  transaction_id: string;
+  internal_transaction_id: string;
+  end_to_end_id: string | null;
+  debtor_name: string | null;
+  debtor_iban: string | null;
+  creditor_name: string | null;
+  creditor_iban: string | null;
+  amount: string;
+  currency: string;
+  bank_transaction_code: string | null;
+  proprietary_bank_transaction_code: string;
+  booking_date: string;
+  booking_date_time: string;
+  value_date: string | null;
+  value_date_time: string | null;
+  remittance_info: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface for Bank Transaction Response
+interface BankTransactionResponse {
+  ing: Record<string, BankTransaction>;
+  bt: Record<string, BankTransaction>;
+}
+
 // Map configuration
 const mapContainerStyle = { width: "100%", height: "300px", borderRadius: "0.5rem" };
 const defaultCenter = { lat: 44.4268, lng: 26.1025 }; // București
@@ -189,6 +220,15 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
   // State for the verify payment modal
   const [showVerifyPaymentModal, setShowVerifyPaymentModal] = useState(false);
+
+  // State for bank transactions
+  const [bankTransactions, setBankTransactions] = useState<BankTransactionResponse | null>(null);
+  const [loadingBankTransactions, setLoadingBankTransactions] = useState(false);
+  const [bankTransactionsError, setBankTransactionsError] = useState<string | null>(null);
+  const [activeBankTab, setActiveBankTab] = useState<'ing' | 'bt'>('ing');
+  const [searchAmount, setSearchAmount] = useState('');
+  const [searchProprietaryBank, setSearchProprietaryBank] = useState('');
+  const [searchRemittance, setSearchRemittance] = useState('');
 
   // State for the client orders modal
   const [showClientOrdersModal, setShowClientOrdersModal] = useState(false);
@@ -1780,6 +1820,42 @@ Echipa Daruri Alese`;
     }
   };
 
+  // Function to fetch bank transactions
+  const fetchBankTransactions = async () => {
+    setLoadingBankTransactions(true);
+    setBankTransactionsError(null);
+
+    try {
+      const response = await fetch('https://crm.actium.ro/api/verificare-cont-bancar', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setBankTransactions(data);
+      console.log('✅ Bank transactions fetched successfully:', data);
+
+    } catch (error) {
+      console.error('❌ Error fetching bank transactions:', error);
+      setBankTransactionsError(`Eroare la încărcarea tranzacțiilor: ${error.message || 'Eroare necunoscută'}`);
+    } finally {
+      setLoadingBankTransactions(false);
+    }
+  };
+
+  // Function to handle adding a transaction
+  const handleAddTransaction = (transaction: BankTransaction) => {
+    console.log('Adding transaction:', transaction);
+    // Here you would implement the logic to add the transaction to the order
+    // For now, just log it
+  };
+
   // Wizard step completion logic
   const getWizardStepStatus = () => {
     const steps = [
@@ -2127,7 +2203,10 @@ Echipa Daruri Alese`;
                               size="sm"
                               variant="outline"
                               className="flex items-center justify-center"
-                              onClick={() => setShowVerifyPaymentModal(true)}
+                              onClick={() => {
+                                setShowVerifyPaymentModal(true);
+                                fetchBankTransactions();
+                              }}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
 
@@ -2630,8 +2709,187 @@ Echipa Daruri Alese`;
               {/*</Card>*/}
             </div>
 
+            <div className={`${showVerifyPaymentModal ? '' : 'hidden'} no-scrollbar h-full col-span-6 grid-cols-2 grid gap-2 overflow-y-auto afisareBancaConturi`}>
+              {/* Payment Verification Content */}
+              <div className="col-span-2 h-full flex flex-col">
+                {/* Header */}
+                <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Verificare plată</h2>
+                  <button 
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowVerifyPaymentModal(false)}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
 
-            <div className="no-scrollbar h-full col-span-6 grid-cols-2 grid gap-2 overflow-y-auto coloanaCentrala">
+                {/* Content */}
+                <div className="flex-1 overflow-hidden p-4">
+                  <div className="h-full max-w-6xl mx-auto">
+                    {/* Error message */}
+                    {bankTransactionsError && (
+                      <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                        <p className="text-red-600 text-sm">{bankTransactionsError}</p>
+                      </div>
+                    )}
+
+                    {/* Loading state */}
+                    {loadingBankTransactions ? (
+                      <div className="flex items-center justify-center h-64">
+                        <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                        <span className="text-muted-foreground">Se încarcă tranzacțiile bancare...</span>
+                      </div>
+                    ) : bankTransactions ? (
+                      <div className="h-full flex flex-col">
+                        {/* Bank Tabs */}
+                        <div className="flex border-b border-border mb-4">
+                          <button
+                            type="button"
+                            onClick={() => setActiveBankTab('ing')}
+                            className={`px-4 py-2 text-sm font-medium ${
+                              activeBankTab === 'ing'
+                                ? 'border-b-2 border-primary text-primary'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            ING ({Object.keys(bankTransactions.ing || {}).length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveBankTab('bt')}
+                            className={`px-4 py-2 text-sm font-medium ${
+                              activeBankTab === 'bt'
+                                ? 'border-b-2 border-primary text-primary'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            BT ({Object.keys(bankTransactions.bt || {}).length})
+                          </button>
+                        </div>
+
+                        {/* Search Filters */}
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <Label htmlFor="searchAmount">Sumă</Label>
+                            <input
+                              id="searchAmount"
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Caută după sumă..."
+                              value={searchAmount}
+                              onChange={(e) => setSearchAmount(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="searchProprietaryBank">Cod tranzacție</Label>
+                            <input
+                              id="searchProprietaryBank"
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Caută după cod..."
+                              value={searchProprietaryBank}
+                              onChange={(e) => setSearchProprietaryBank(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="searchRemittance">Detalii</Label>
+                            <input
+                              id="searchRemittance"
+                              type="text"
+                              className="w-full p-2 border border-border rounded-md"
+                              placeholder="Caută în detalii..."
+                              value={searchRemittance}
+                              onChange={(e) => setSearchRemittance(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Transactions List */}
+                        <div className="flex-1 overflow-y-auto border border-border rounded-md">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted sticky top-0">
+                              <tr>
+                                <th className="py-2 px-3 text-left font-medium">Data</th>
+                                <th className="py-2 px-3 text-left font-medium">Sumă</th>
+                                <th className="py-2 px-3 text-left font-medium">Detalii</th>
+                                <th className="py-2 px-3 text-center font-medium w-20">Acțiuni</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                const currentTransactions = activeBankTab === 'ing' 
+                                  ? Object.values(bankTransactions.ing || {})
+                                  : Object.values(bankTransactions.bt || {});
+
+                                // Filter transactions based on search criteria
+                                const filteredTransactions = currentTransactions.filter(transaction => {
+                                  const matchesAmount = !searchAmount || transaction.amount.toLowerCase().includes(searchAmount.toLowerCase());
+                                  const matchesProprietaryBank = !searchProprietaryBank || transaction.proprietary_bank_transaction_code.toLowerCase().includes(searchProprietaryBank.toLowerCase());
+                                  const matchesRemittance = !searchRemittance || transaction.remittance_info.toLowerCase().includes(searchRemittance.toLowerCase());
+                                  return matchesAmount && matchesProprietaryBank && matchesRemittance;
+                                });
+
+                                return filteredTransactions.length > 0 ? (
+                                  filteredTransactions.map((transaction) => (
+                                    <tr key={transaction.id} className="border-t border-border hover:bg-muted/50">
+                                      <td className="py-2 px-3">
+                                        {new Date(transaction.booking_date).toLocaleDateString('ro-RO')}
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <Badge variant="secondary" className="font-mono">
+                                          {transaction.amount} {transaction.currency}
+                                        </Badge>
+                                      </td>
+                                      {/*<td className="py-2 px-3 text-xs">*/}
+                                      {/*  {transaction.proprietary_bank_transaction_code}*/}
+                                      {/*</td>*/}
+                                      <td className="py-2 px-3 text-xs max-w-md truncate" title={transaction.remittance_info}>
+                                        {transaction.remittance_info}
+                                      </td>
+                                      <td className="py-2 px-3 text-center">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleAddTransaction(transaction)}
+                                          className="text-xs"
+                                        >
+                                          Adaugă
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr className="border-t border-border">
+                                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                                      Nu s-au găsit tranzacții care să corespundă criteriilor de căutare.
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-64">
+                        <div className="text-center">
+                          <div className="text-2xl mb-2">🏦</div>
+                          <p className="text-muted-foreground">Apasă butonul pentru a încărca tranzacțiile bancare</p>
+                          <Button 
+                            className="mt-4"
+                            onClick={fetchBankTransactions}
+                          >
+                            Încarcă tranzacții
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`${showVerifyPaymentModal ? 'hidden' : ''} no-scrollbar h-full col-span-6 grid-cols-2 grid gap-2 overflow-y-auto coloanaCentrala`}>
               {/* Center column (25%) - Confirmation & production options */}
               <div className="no-scrollbar h-full space-y-4 overflow-y-auto ">
 
@@ -4001,34 +4259,6 @@ Echipa Daruri Alese`;
         {/*</div>*/}
       </DialogContent>
 
-      {/* Verify Payment Modal */}
-      {showVerifyPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowVerifyPaymentModal(false)} />
-          <div className="relative bg-background p-6 rounded-lg shadow-lg w-[500px] max-w-[90vw]">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Verificare plată</h2>
-              <button 
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => setShowVerifyPaymentModal(false)}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="py-4">
-              {/* Empty modal content as per requirements */}
-            </div>
-            <div className="flex justify-end mt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowVerifyPaymentModal(false)}
-              >
-                Închide
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </Dialog>
   );
