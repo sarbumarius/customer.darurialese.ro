@@ -14,7 +14,7 @@ import ConfirmationSelects from "@/components/content/ConfirmationSelects";
 import ProductPersonalizationCard from "@/components/content/ProductPersonalizationCard";
 import OrderSummary from "@/components/content/OrderSummary";
 import GiftsSlider from "@/components/content/GiftsSlider";
-import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users } from "lucide-react";
+import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users, ChevronRight, Check } from "lucide-react";
 import type { Comanda } from "@/types/dashboard";
 
 // Interface for SMS message
@@ -192,7 +192,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
   // State for the client orders modal
   const [showClientOrdersModal, setShowClientOrdersModal] = useState(false);
-  
+
   // State for updating gift status
   const [isUpdatingGift, setIsUpdatingGift] = useState(false);
 
@@ -752,7 +752,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
       // Optionally show success message or update UI
       if (data.success) {
         console.log(`💳 ${data.message}`);
-        
+
         // Refresh user data from API to ensure all UI components have the latest data
         if (refreshUserData) {
           await refreshUserData(confirmOrder.ID);
@@ -1068,7 +1068,7 @@ export const ConfirmOrderDialog: React.FC<ConfirmOrderDialogProps> = ({
 
         // Clear success message after 3 seconds
         setTimeout(() => setPuncteAddSuccess(null), 3000);
-        
+
         // Refresh user data from API to ensure all UI components have the latest data
         if (refreshUserData && confirmOrder.ID) {
           await refreshUserData(confirmOrder.ID);
@@ -1601,7 +1601,7 @@ Echipa Daruri Alese`;
       }
 
       console.log(`Difficulty updated successfully to ${value}`);
-      
+
       // Refresh user data from API to ensure all UI components have the latest data
       if (refreshUserData) {
         await refreshUserData(confirmOrder.ID);
@@ -1644,7 +1644,7 @@ Echipa Daruri Alese`;
       }
 
       console.log(`Client mood updated successfully to ${iconName}`);
-      
+
       // Refresh user data from API to ensure all UI components have the latest data
       if (refreshUserData) {
         await refreshUserData(confirmOrder.ID);
@@ -1678,37 +1678,37 @@ Echipa Daruri Alese`;
   const getPaymentStatusText = (order: Comanda | null): string => {
     return isOrderPaid(order) ? 'Plătit' : 'Neplătit';
   };
-  
+
   // Function to toggle gift status
   const toggleGiftStatus = async () => {
     if (!confirmOrder?.ID || isUpdatingGift) return;
-    
+
     const isGift = confirmOrder?.comandaCadou !== false && 
                  (confirmOrder?.comandaCadou === 1 || 
                   confirmOrder?.comandaCadou === '1' || 
                   confirmOrder?.comandaCadou === true || 
                   String(confirmOrder?.comandaCadou || '').trim() === '1');
-    
+
     try {
       setIsUpdatingGift(true);
       // Send "nu" if it's currently a gift, otherwise send "da"
       const newValue = isGift ? 'nu' : 'da';
-      
+
       const response = await fetch(`https://crm.actium.ro/api/modificarei-comanda-caodu/${confirmOrder.ID}/${newValue}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
-      
+
       // Parse the API response to get updated data
       const responseData = await response.json();
       console.log('API response:', responseData);
-      
+
       // Update the local state to reflect the change
       // Map the API response to the appropriate format
       // For "da" the comandaCadou should be true/1/"1", for "nu" it should be false/0/"0"
@@ -1716,14 +1716,14 @@ Echipa Daruri Alese`;
         ...confirmOrder,
         comandaCadou: newValue === 'da' ? true : false
       };
-      
 
-      
+
+
       // Refresh user data from API to ensure all UI components have the latest data
       if (refreshUserData && confirmOrder.ID) {
         await refreshUserData(confirmOrder.ID);
       }
-      
+
       console.log(`Gift status updated to ${newValue}`, updatedOrder);
     } catch (error) {
       console.error('Error updating gift status:', error);
@@ -1745,6 +1745,55 @@ Echipa Daruri Alese`;
     });
   };
 
+  // Wizard step completion logic
+  const getWizardStepStatus = () => {
+    const steps = [
+      {
+        id: 1,
+        title: "Cadou selectat",
+        completed: confirmOrder?.comandaCadou !== undefined && confirmOrder?.comandaCadou !== null
+      },
+      {
+        id: 2,
+        title: "Dificultate",
+        completed: confirmOrder?.dificultate !== undefined && confirmOrder?.dificultate !== null
+      },
+      {
+        id: 3,
+        title: "Data expediere",
+        completed: confirmOrder?.expediere !== undefined && confirmOrder?.expediere !== null && confirmOrder?.expediere !== ""
+      },
+      {
+        id: 4,
+        title: "Tip client",
+        completed: (confirmOrder?.billing_details?._billing_first_name || confirmOrder?.shipping_details._shipping_first_name) !== undefined
+      },
+      {
+        id: 5,
+        title: "Curier ales",
+        completed: confirmOrder?.ramburs !== undefined && confirmOrder?.ramburs !== null && confirmOrder?.ramburs !== ""
+      },
+      {
+        id: 6,
+        title: "Metoda de plata",
+        completed: confirmOrder?.payment_method !== undefined && confirmOrder?.payment_method !== null && confirmOrder?.payment_method !== ""
+      },
+      {
+        id: 7,
+        title: "Confirma comanda",
+        completed: false // This will be determined by all other steps
+      }
+    ];
+
+    // Check if all first 6 steps are completed
+    const allStepsCompleted = steps.slice(0, 6).every(step => step.completed);
+    steps[6].completed = allStepsCompleted;
+
+    return { steps, allStepsCompleted };
+  };
+
+  const { steps: wizardSteps, allStepsCompleted } = getWizardStepStatus();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="fixed inset-0 w-full h-full max-w-[1800px] p-0 m-0 rounded-none translate-x-0 translate-y-0 overflow-hidden flex flex-col mx-auto gap-0">
@@ -1758,13 +1807,13 @@ Echipa Daruri Alese`;
               #{confirmOrder?.ID}
               </a>
             </Badge>
-            
+
             {/* Name */}
             <span className="font-semibold">
               {confirmOrder?.shipping_details._shipping_first_name}{" "}
               {confirmOrder?.shipping_details._shipping_last_name}
             </span>
-            
+
             {/* Order count in parentheses */}
             <button 
               className="text-sm text-muted-foreground hover:text-primary focus:outline-none focus:text-primary flex items-center"
@@ -1785,7 +1834,7 @@ Echipa Daruri Alese`;
               {(() => {
                 const v = confirmOrder?.comandaCadou;
                 const isGift = v !== false && (v === 1 || v === '1' || v === true || String(v || '').trim() === '1');
-                
+
                 return (
                   <button 
                     onClick={toggleGiftStatus}
@@ -1856,7 +1905,58 @@ Echipa Daruri Alese`;
           </div>
         </div>
 
+        {/* Wizard Progress Bar */}
+        <div className="sticky  z-9 bg-gray-50 border-b border-border px-4 py-2">
+          <div className="flex items-center justify-between  mx-auto">
+            <div className="flex items-center space-x-1">
+              {wizardSteps.map((step, index) => (
+                <React.Fragment key={step.id}>
+                  <div className="flex items-center space-x-2">
+                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                      step.completed 
+                        ? 'bg-green-500 text-white' 
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {step.completed ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        step.id
+                      )}
+                    </div>
+                    <span className={`text-sm font-medium ${
+                      step.completed ? 'text-green-600' : 'text-gray-500'
+                    }`}>
+                      {step.title}
+                    </span>
+                  </div>
+                  {index < wizardSteps.length - 1 && (
+                    <ChevronRight className="w-4 h-4 text-gray-400 mx-2" />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
 
+            {/* Confirm Order Button */}
+            <Button 
+              size="sm" 
+              className={`${
+                allStepsCompleted 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+              disabled={!allStepsCompleted}
+              onClick={() => {
+                if (allStepsCompleted) {
+                  console.log('Confirming order...');
+                  // Add your confirm order logic here
+                }
+              }}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Confirma comanda
+            </Button>
+          </div>
+        </div>
 
         {/* Main content area with 4 columns */}
         <div className="flex-1 overflow-y-auto p-4">
@@ -3166,61 +3266,61 @@ Echipa Daruri Alese`;
                     {confirmOrder?.produse_finale.map((produs, idx) => {
                       // Initialize personalization data array
                       let personalizationData = [];
-                      
+
                       // Check if we have personalization data in the items
                       if (confirmOrder?.items && Array.isArray(confirmOrder.items)) {
                         // Find the line item that corresponds to this product
                         const orderItem = confirmOrder.items.find(item => 
                           item.order_item_type === "line_item"
                         );
-                        
+
                         if (orderItem && orderItem.order_item_meta) {
                           // Check for _tmcartepo_data meta
                           const personalizationMeta = orderItem.order_item_meta.find(meta => 
                             meta.meta_key === "_tmcartepo_data"
                           );
-                          
+
                           if (personalizationMeta && personalizationMeta.meta_value) {
                             try {
                               // Parse the serialized PHP data structure
                               // We'll extract the personalization items from the _tmcartepo_data field
                               const data = [];
-                              
+
                               // Regular expressions to extract data from the serialized PHP format
                               // This is a simplified approach to extract the key data points
                               const valuePattern = /s:5:"value";s:\d+:"([^"]*)"/g;
                               const namePattern = /s:4:"name";s:\d+:"([^"]*)"/g;
                               const typePattern = /s:4:"type";s:\d+:"([^"]*)"/g;
                               const displayPattern = /s:7:"display";s:\d+:"([^"]*)"/g;
-                              
+
                               const metaValue = personalizationMeta.meta_value;
-                              
+
                               // Extract all names, values, and types
                               const names = [];
                               const values = [];
                               const types = [];
                               const displays = [];
-                              
+
                               let nameMatch;
                               while ((nameMatch = namePattern.exec(metaValue)) !== null) {
                                 names.push(nameMatch[1]);
                               }
-                              
+
                               let valueMatch;
                               while ((valueMatch = valuePattern.exec(metaValue)) !== null) {
                                 values.push(valueMatch[1]);
                               }
-                              
+
                               let typeMatch;
                               while ((typeMatch = typePattern.exec(metaValue)) !== null) {
                                 types.push(typeMatch[1]);
                               }
-                              
+
                               let displayMatch;
                               while ((displayMatch = displayPattern.exec(metaValue)) !== null) {
                                 displays.push(displayMatch[1]);
                               }
-                              
+
                               // Create personalization items combining the extracted data
                               for (let i = 0; i < names.length; i++) {
                                 if (values[i]) {
@@ -3229,7 +3329,7 @@ Echipa Daruri Alese`;
                                     value: values[i],
                                     type: types[i] || 'textfield', // Default to textfield if type not found
                                   };
-                                  
+
                                   // Add display property for uploads
                                   if (types[i] === 'upload' && displays[i]) {
                                     // Extract the filename from display HTML
@@ -3240,11 +3340,11 @@ Echipa Daruri Alese`;
                                       item.display = 'Vezi imaginea';
                                     }
                                   }
-                                  
+
                                   data.push(item);
                                 }
                               }
-                              
+
                               personalizationData = data;
                             } catch (e) {
                               console.error("Error parsing personalization data:", e);
@@ -3252,7 +3352,7 @@ Echipa Daruri Alese`;
                           }
                         }
                       }
-                      
+
                       return (
                         <ProductPersonalizationCard 
                           key={idx} 
@@ -3787,7 +3887,7 @@ Echipa Daruri Alese`;
                           Adăugați persoane apropiate clientului pentru a ține evidența evenimentelor și preferințelor acestora.
                         </p>
                       </div>
-                      
+
                       <div className="flex flex-col space-y-2 mb-4">
                         <div className="flex gap-2">
                           <div className="flex-1">
@@ -3819,7 +3919,7 @@ Echipa Daruri Alese`;
                           </Button>
                         </div>
                       </div>
-                      
+
                       <div className="border border-border rounded-md overflow-hidden flex-grow min-h-0">
                         <div className="p-8 text-center text-muted-foreground">
                           Nu există persoane adăugate pentru acest client.

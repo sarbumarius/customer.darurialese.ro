@@ -84,19 +84,19 @@ export const Content = ({
   // Notes off-canvas state
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [notesOrder, setNotesOrder] = useState<Comanda | null>(null);
-  
+
   const refreshUserData = async (orderId: number) => {
     try {
       console.log(`🔄 Refreshing user data for order ${orderId}`);
       // Use the correct API endpoint format - this endpoint expects an order ID
       const response = await fetch(`https://crm.actium.ro/api/comenzi-daruri-alese-customer-id/${orderId}`);
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data && Array.isArray(data) && data.length > 0) {
         // Normalize the data format, similar to Dashboard.tsx
         const processedData = data.map((o: any) => {
@@ -116,7 +116,7 @@ export const Content = ({
             lipsuri: Array.isArray(o.lipsuri) ? o.lipsuri : [],
           };
         });
-        
+
         // Update the specific order in the comenzi array
         setComenzi(prevComenzi => {
           return prevComenzi.map(comanda => {
@@ -126,12 +126,12 @@ export const Content = ({
             return comanda;
           });
         });
-        
+
         // Update confirmOrder if it's the current order being viewed
         if (confirmOrder?.ID === orderId) {
           setConfirmOrder(processedData[0]);
         }
-        
+
         console.log(`✅ User data refreshed successfully for order ${orderId}`);
       } else {
         console.error(`No data returned or invalid data format for order ${orderId}`);
@@ -343,7 +343,7 @@ export const Content = ({
     // We don't filter out commands that are being started
     // This allows the command to remain visible while processing
 
-    if (zonaActiva === 'backlines') {
+    if (zonaActiva === 'backlines' || zonaActiva === 'procesare') {
       // Sort oldest first by data_comanda (fallback to post_date). Missing dates go to bottom.
       filtered = [...filtered].sort((a, b) => {
         const da = a.data_comanda || a.post_date || '';
@@ -1564,6 +1564,17 @@ export const Content = ({
                           }).length;
                         }
                       }
+
+                      // Check if order is from today for processing zone
+                      const isToday = (() => {
+                        if (zonaActiva !== 'procesare') return false;
+                        const orderDate = c.data_comanda || c.post_date || '';
+                        if (!orderDate) return false;
+                        const today = new Date();
+                        const orderDateObj = new Date(orderDate);
+                        return today.toDateString() === orderDateObj.toDateString();
+                      })();
+
                       const totalCols = isBacklines ? 7 : 6;
                       return (
                         <TableRow key={`${c.ID}-main`} className={`${(highlightedOrderId === c.ID || isPreOneDay) ? 'bg-green-100' : ''}`}>
@@ -1662,6 +1673,11 @@ export const Content = ({
                                           <Gift className="w-4 h-4 text-pink-600 shrink-0" title="Acest colet este oferit cadou" />
                                         ) : null;
                                       })()}
+                                      {isToday && (
+                                        <Badge className="bg-green-100 text-green-800 border-green-200 text-xs px-2 py-0.5 ml-1">
+                                          Venit azi!
+                                        </Badge>
+                                      )}
                                     </div>
                                     {showSecondary && secondaryName && (
                                       <div className="mt-0.5 text-[11px] text-muted-foreground truncate" title={secondaryName}>
