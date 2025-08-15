@@ -14,7 +14,7 @@ import ConfirmationSelects from "@/components/content/ConfirmationSelects";
 import ProductPersonalizationCard from "@/components/content/ProductPersonalizationCard";
 import OrderSummary from "@/components/content/OrderSummary";
 import GiftsSlider from "@/components/content/GiftsSlider";
-import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users, ChevronRight, Check, ChevronUp } from "lucide-react";
+import { Gift, CalendarClock, PhoneCall, X, ImageOff, Cog, Send, Loader2, User, ShoppingBag, Eye, Info, Mail, MessageSquare, CheckCircle, FileText, CreditCard, Users, ChevronRight, Check, ChevronUp, Plus } from "lucide-react";
 import type { Comanda } from "@/types/dashboard";
 
 // Interface for SMS message
@@ -2206,6 +2206,12 @@ Echipa Daruri Alese`;
                               onClick={() => {
                                 setShowVerifyPaymentModal(true);
                                 fetchBankTransactions();
+                                // Auto-populate search amount with order total
+                                const orderTotal = confirmOrder?.pret_total || confirmOrder?.order_total_formatted?.replace(/[^\d.,]/g, '') || '';
+                                setSearchAmount(orderTotal.toString());
+                                // Auto-populate search details with order ID
+                                const orderId = confirmOrder?.ID || '';
+                                setSearchRemittance(orderId.toString());
                               }}
                             >
                               <CheckCircle className="h-4 w-4 mr-1" />
@@ -2742,7 +2748,7 @@ Echipa Daruri Alese`;
                     ) : bankTransactions ? (
                       <div className="h-full flex flex-col">
                         {/* Bank Tabs */}
-                        <div className="flex border-b border-border mb-4">
+                        <div className="relative flex border-b border-border mb-4">
                           <button
                             type="button"
                             onClick={() => setActiveBankTab('ing')}
@@ -2765,6 +2771,23 @@ Echipa Daruri Alese`;
                           >
                             BT ({Object.keys(bankTransactions.bt || {}).length})
                           </button>
+                          <Button
+                            type="button"
+                            onClick={fetchBankTransactions}
+                            disabled={loadingBankTransactions}
+                            variant="outline"
+                            size="sm"
+                            className="absolute right-0"
+                          >
+                            {loadingBankTransactions ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Se actualizează...
+                              </>
+                            ) : (
+                              'Actualizeaza extrase'
+                            )}
+                          </Button>
                         </div>
 
                         {/* Search Filters */}
@@ -2853,7 +2876,7 @@ Echipa Daruri Alese`;
                                           onClick={() => handleAddTransaction(transaction)}
                                           className="text-xs"
                                         >
-                                          Adaugă
+                                          <Plus className="h-4 w-4" />
                                         </Button>
                                       </td>
                                     </tr>
